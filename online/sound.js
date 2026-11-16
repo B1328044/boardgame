@@ -67,26 +67,54 @@ const Sound=(()=>{
   // 震動：手機有支援才震（多數 Android 可以；iPhone 的 Safari 不支援就略過）。
   function vibrate(pattern){if(!pref.sfx)return;try{navigator.vibrate?.(pattern)}catch{}}
 
-  /* ---------- 背景音樂：依景氣切換（正常輕快、衰退緩慢小調、過熱加快） ---------- */
+  /* ---------- 背景音樂：8-bit 遊戲機風格（原創旋律），依景氣切換 ----------
+     方波主旋律＋三角波「咚—喳」低音＋雜訊鼓，像紅白機時代的冒險遊戲。
+     旋律是自己寫的，不是任何遊戲的曲子。一段 8 小節，每小節 8 個八分音符。 */
+  const _=null;
+  const SONGS={
+    major:{   // C 大調，輕快跳躍：C–Am–F–G–C–Am–Dm–G
+      mel:[67,72,76,79,_,76,77,76, 72,_,69,72,76,_,74,72, 69,72,77,_,77,76,74,72, 71,_,74,_,79,_,77,_,
+           67,72,76,79,_,81,79,76, 77,76,74,72,_,74,76,_, 74,_,77,_,81,79,77,74, 79,77,74,71,72,_,_,_],
+      roots:[48,45,41,43,48,45,38,43]},
+    minor:{   // A 小調，慢一點、有點不安：Am–F–G–Em–Am–Dm–E–Am
+      mel:[69,_,72,_,76,_,74,72, 69,_,72,_,77,76,74,_, 71,_,74,_,79,_,77,74, 76,_,_,_,71,_,_,_,
+           69,72,76,_,74,72,71,_, 74,_,77,_,76,74,72,_, 71,_,68,_,71,74,76,_, 69,_,_,_,_,_,_,_],
+      roots:[45,41,43,40,45,38,40,45]},
+  };
   const MOODS={
-    lobby:{bpm:88,chords:[[60,64,67],[57,60,64],[53,57,60],[55,59,62]],arp:[0,1,2,1,0,1,2,1],rest:[1,3,5,7],hat:false,bass:[0],vol:.7},
-    normal:{bpm:96,chords:[[60,64,67],[57,60,64],[53,57,60],[55,59,62]],arp:[0,1,2,1,0,2,1,2],rest:[],hat:false,bass:[0,4],vol:1},
-    boom:{bpm:126,chords:[[62,66,69],[59,62,66],[55,59,62],[57,61,64]],arp:[0,1,2,1,2,1,0,1],rest:[],hat:true,bass:[0,2,4,6],vol:1},
-    recession:{bpm:70,chords:[[57,60,64],[53,57,60],[50,53,57],[52,56,59]],arp:[0,2,1,2,0,2,1,2],rest:[1,3,5,7],hat:false,bass:[0],vol:.85},
+    lobby:{song:'major',bpm:116,shift:0,drums:'none',lead:'triangle',vol:.8},
+    normal:{song:'major',bpm:134,shift:0,drums:'full',lead:'square',vol:1},
+    boom:{song:'major',bpm:154,shift:2,drums:'full',lead:'square',echo:true,vol:1},        // 景氣過熱：升調、加快、加回音
+    recession:{song:'minor',bpm:96,shift:0,drums:'soft',lead:'triangle',vol:.95},          // 景氣衰退：小調、變慢
   };
   let mood='lobby',nextMood='lobby',step=0,nextTime=0,timer=null,wantMusic=false;
   function scheduleStep(m,t,i){
-    const s=i%8,ch=m.chords[Math.floor(i/8)%m.chords.length],len=60/m.bpm/2,at=t-ctx.currentTime,v=m.vol;
-    if(!m.rest.includes(s))tone(hz(ch[m.arp[s]]+12),{at,dur:len*1.6,type:'triangle',vol:.07*v,bus:musicBus});
-    if(m.bass.includes(s))tone(hz(ch[0]-12),{at,dur:len*(m.bass.length>2?1.6:3.5),vol:.16*v,bus:musicBus});
-    if(s===0)ch.forEach(n=>tone(hz(n),{at,dur:len*8,vol:.025*v,attack:.25,bus:musicBus}));
-    if(m.hat&&s%2)noise({at,dur:.04,vol:.04,freq:8000,q:1,type:'highpass',bus:musicBus});
+    const song=SONGS[m.song],s=i%64,b=Math.floor(s/8),beat=s%8,len=60/m.bpm/2,at=t-ctx.currentTime,v=m.vol;
+    const n=song.mel[s];
+    if(n!==null){
+      let hold=1;while(hold<3&&s+hold<64&&song.mel[s+hold]===null&&(s+hold)%8!==0)hold++;
+      const sq=m.lead==='square';
+      tone(hz(n+m.shift),{at,dur:len*hold*.85,type:m.lead,vol:(sq?.045:.1)*v,bus:musicBus});
+      if(m.echo)tone(hz(n+m.shift),{at:at+len*.5,dur:len*.5,type:'square',vol:.015*v,bus:musicBus});
+    }
+    // 低音：拍點彈根音、反拍彈五度（咚—喳—咚—喳）
+    const root=song.roots[b]+m.shift,bassOn=m.drums==='soft'?[0,4]:[0,2,4,6];
+    if(bassOn.includes(beat))tone(hz(beat%4===0?root:root+7),{at,dur:len*.8,type:'triangle',vol:.17*v,bus:musicBus});
+    // 鼓：大鼓 0、4；小鼓 2、6；鈸每個八分音符
+    if(m.drums!=='none'){
+      if(beat===0||(m.drums==='full'&&beat===4))tone(150,{at,dur:.11,vol:.22*v,to:45,bus:musicBus});
+      if(m.drums==='full'){
+        if(beat===2||beat===6)noise({at,dur:.09,vol:.07*v,freq:1800,q:.8,bus:musicBus});
+        noise({at,dur:.025,vol:(beat%2?.022:.012)*v,freq:7500,q:1,type:'highpass',bus:musicBus});
+      }
+    }
   }
   function pump(){
     if(!running())return;
     if(nextTime<ctx.currentTime)nextTime=ctx.currentTime+.05;
     while(nextTime<ctx.currentTime+.25){
-      if(step%8===0)mood=nextMood;   // 換段落時才切換曲風，聽起來比較自然
+      // 同一首曲子換小節就切換（例如正常→過熱）；換成另一首（大調↔小調）則等這段 8 小節結束再換。
+      if(nextMood!==mood&&(step%64===0||(step%8===0&&MOODS[nextMood].song===MOODS[mood].song)))mood=nextMood;
       const m=MOODS[mood];scheduleStep(m,nextTime,step);nextTime+=60/m.bpm/2;step++;
     }
   }
