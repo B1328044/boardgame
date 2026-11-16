@@ -12,6 +12,26 @@ const TYPE_ICON={fortune:'✦',market:'◎',chance:'?',loss:'⚠',start:'☕'};
 const PHASE_TEXT={roll:'準備拉霸',draw:'準備抽卡',choice:'正在考慮機會卡',manage:'理財中',skip:'暫停一回合',finished:'對局結束'};
 const WIN_TEXT={goal:'達成目標',progress:'季數用完，目標進度最高',survivor:'其他玩家都破產',bankruptcy:'所有玩家都破產'};
 function boardCoords(i){if(i<=6)return [1,i+1];if(i<=12)return [i-5,7];if(i<=18)return [7,19-i];return [25-i,1]}
+/* 動態分類：大螢幕與手機用來決定提示顏色、音效與震動 */
+function splitLog(x){const r=/^第 (\d+) 季｜(.*)$/.exec(x);return r?{round:Number(r[1]),text:r[2]}:{round:null,text:x}}
+function classify(t){
+  if(/破產/.test(t))return ['bad','💥'];
+  if(/達成目標|獲勝|買下/.test(t))return ['good','🏆'];
+  if(/合作|案子/.test(t))return ['social','🤝'];
+  if(/季結算|市場事件/.test(t))return ['econ','📈'];
+  if(/遭遇|倒會|自動動用|無法行動/.test(t))return ['bad','⚠️'];
+  if(/抽到|選擇/.test(t))return ['card','🃏'];
+  if(/拉出/.test(t))return ['roll','🎰'];
+  if(/休息站|收回/.test(t))return ['good','☕'];
+  return ['','•'];
+}
+// 重大事件對應的音效（優先順序高的先播；同一次更新只播一個，避免太吵）。
+const EVENT_SOUNDS=[[/獲勝/,'win',6],[/破產/,'bankrupt',5],[/達成目標|買下/,'win',4],[/搶下/,'steal',3],[/合作，雙方/,'alliance',2],[/季結算/,'settle',1]];
+function eventSound(lines){
+  let best=null;
+  for(const x of lines){const t=splitLog(x).text;for(const [re,name,p] of EVENT_SOUNDS)if(re.test(t)){if(!best||p>best.p)best={name,p,text:t};break}}
+  return best;
+}
 function toast(msg){let el=$('#toast');if(!el){el=document.createElement('div');el.id='toast';el.className='toast';el.setAttribute('role','status');document.body.appendChild(el)}el.textContent=msg;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),3200)}
 function storeGet(key){try{return JSON.parse(localStorage.getItem(key))}catch{return null}}
 function storeSet(key,v){try{v==null?localStorage.removeItem(key):localStorage.setItem(key,JSON.stringify(v))}catch{}}

@@ -8,6 +8,53 @@ let pub=null,priv=null,joined=false,busy=false,kicked='',pendingHello=null;
 let peer=null,conn=null,refSerial=0,beatTimer=null,retryTimer=null;
 const waiting=new Map();
 
+/* ---------- 音效、震動、畫面提醒 ---------- */
+// 手機只播「跟自己有關」的音效與震動；震動只有支援的手機才有（iPhone 的 Safari 不支援就略過）。
+let fxCardKey=null,fxLogLen=null,wake=null;
+function phoneFx(pp,pv){
+  const g=pub?.game,pg=pp?.game,me=priv?.me,pm=pv?.me,name=priv?.name||'';
+  const ck=g?.card?`${g.round}-${g.turnIndex}-${g.card.id}`:null;
+  // 輪到自己（包含開局第一位）：提示音＋整個畫面閃一下（不震動）
+  if(pp&&priv?.isMyTurn&&!pv?.isMyTurn){Sound.play('myTurn');document.body.classList.remove('turn-flash');void document.body.offsetWidth;document.body.classList.add('turn-flash')}
+  if(!g||!pg||!me||!pm||pv.playerId!==priv.playerId){fxLogLen=g?g.logCount:null;fxCardKey=ck;return}
+  // 自己抽到的卡：翻牌＋卡片類型音效
+  const myCard=ck&&ck!==fxCardKey&&g.currentId===priv.playerId;
+  if(myCard){Sound.play('flip');Sound.play(g.card.type)}
+  fxCardKey=ck;
+  // 新動態裡跟自己有關的事件
+  const fresh=fxLogLen!==null&&g.logCount>fxLogLen?g.log.slice(0,g.logCount-fxLogLen).map(x=>splitLog(x).text):[];
+  fxLogLen=g.logCount;
+  let snd=null,vib=null;
+  const won=pub.status!=='playing'&&g.winnerIds.includes(priv.playerId);
+  for(const t of fresh){
+    if(t.startsWith(name)&&/破產/.test(t)){snd='bankrupt';vib=[600];break}
+    if(/獲勝/.test(t)&&won){snd='win';vib=[100,50,100,50,300];break}
+    if(t.startsWith(name)&&/達成目標|買下/.test(t)){snd='win';vib=[100,50,100,50,300]}
+    else if(t.includes(`搶下${name}的案子`)){snd=snd||'steal';vib=vib||[80,60,80,60,80]}
+    else if(t.startsWith(name)&&/搶下/.test(t)){snd=snd||'steal';vib=vib||[60]}
+    else if(/合作，雙方/.test(t)&&(t.startsWith(name)||t.includes(`與${name}合作`))){snd=snd||'alliance';vib=vib||[60,40,60]}
+    else if(t.startsWith(`${name}遭遇`)){vib=vib||[200,100,200]}
+    else if(/^市場事件/.test(t)){vib=vib||[120]}
+  }
+  // 疲勞剛超過過勞門檻：嘆氣＋震動
+  const burn=me.fatigueRules?.burnout??70;
+  if(pm.fatigue<burn&&me.fatigue>=burn){snd=snd||'sigh';vib=vib||[300]}
+  const delay=myCard?700:0;
+  if(snd)setTimeout(()=>Sound.play(snd),delay);
+  if(vib)setTimeout(()=>Sound.vibrate(vib),delay);
+  // 現金變動：增加「叮噹」、減少「咻」
+  const diff=me.cash-pm.cash;
+  if(Math.abs(diff)>=.05)setTimeout(()=>Sound.play(diff>0?'coinUp':'coinDown'),snd?delay+900:delay);
+}
+// 遊戲中保持螢幕不自動關閉，避免鎖螢幕後收不到「輪到你」（有支援的瀏覽器才會生效）。
+async function keepAwake(){
+  if(wake||!joined||kicked||document.visibilityState!=='visible'||!('wakeLock' in navigator))return;
+  wake='pending';
+  try{const l=await navigator.wakeLock.request('screen');wake=l;l.addEventListener('release',()=>{if(wake===l)wake=null})}catch{wake=null}
+}
+function soundBtn(){const b=$('#snd');if(b){b.textContent=Sound.pref.sfx?'🔊':'🔇';b.setAttribute('aria-label',Sound.pref.sfx?'關閉音效與震動':'開啟音效與震動')}}
+document.addEventListener('pointerdown',()=>{Sound.unlock();keepAwake()},{capture:true});
+
 /* ---------- 連線 ---------- */
 function later(){clearTimeout(retryTimer);retryTimer=setTimeout(connect,NET.retryMs)}
 function connect(){
@@ -44,7 +91,7 @@ function dial(){
 }
 function onMessage(msg){
   if(msg?.kind==='reply'){const done=waiting.get(msg.ref);if(done){waiting.delete(msg.ref);done(msg)}return}
-  if(msg?.kind==='view'){pub=msg.pub;priv=msg.mine;render();return}
+  if(msg?.kind==='view'){const pp=pub,pv=priv;pub=msg.pub;priv=msg.mine;try{phoneFx(pp,pv)}catch(e){console.error(e)}render();return}
   if(msg?.kind==='removed'){kicked=msg.reason||'你已離開房間。';joined=false;storeSet(tokenKey(),null);clearInterval(beatTimer);try{conn?.close()}catch{}render()}
 }
 function request(kind,data={}){
@@ -73,7 +120,7 @@ function render(){
   // 加入表單已經在畫面上時不要重畫，避免把正在輸入的名字清掉。
   if(!code||!joined){if(!$('#join-form'))v.innerHTML=joinForm();return}
   if(!pub||!priv){v.innerHTML='<p class="muted">載入中…</p>';return}
-  $('#top-name').textContent=priv.name;
+  $('#top-name').textContent=priv.name;keepAwake();
   if(!pub.game){$('#top-sub').textContent=`房間 ${code} · 等待開始`;v.innerHTML=lobbyWait();return}
   const g=pub.game;$('#top-sub').textContent=`房間 ${code} · 第 ${g.round}／${g.maxRounds} 季`;
   v.innerHTML=(pub.status!=='playing'?finishedCard(g):turnCard(g))+meCard();
@@ -83,7 +130,7 @@ function joinForm(){
   return `<section class="phone-card" id="join-form"><p class="eyebrow">加入房間</p><h2>人生棋局</h2>
     <label class="field">房號<input id="code" maxlength="4" autocomplete="off" value="${h(code)}" placeholder="例如 AB12"></label>
     <label class="field">你的名字<input id="name" maxlength="16" placeholder="例如 小明"></label>
-    <fieldset class="role-pick"><legend>選擇角色（可以重複）</legend>${roles.map((r,i)=>`<label class="role-opt"><input type="radio" name="role" value="${r.id}" ${i===0?'checked':''}><span><b>${r.icon} ${h(r.name)}</b><small>${h(r.goal)}</small></span></label>`).join('')}</fieldset>
+    <fieldset class="role-pick"><legend>選擇角色（角色可重複，不同玩家可以選同一個）</legend>${roles.map((r,i)=>`<label class="role-opt"><input type="radio" name="role" value="${r.id}" ${i===0?'checked':''}><span><b>${r.icon} ${h(r.name)}</b><small>${h(r.goal)}</small></span></label>`).join('')}</fieldset>
     <button class="primary big" data-a="join">加入 <span>→</span></button></section>`;
 }
 function lobbyWait(){
@@ -114,11 +161,20 @@ function turnCard(g){
   const debtOpts=me.debts.map(d=>`<option value="${d.id}">${h(d.name)} · 餘 ${m(d.balance)} · 年息 ${d.rate}%</option>`).join('');
   const goal=me.buy.type==='car'?`<button class="goal-btn" data-a="buy" ${me.buy.ok&&!busy?'':'disabled'}>一次付清買車（${m(me.buy.price)}）${me.buy.ok?' 🏁':''}</button>`:me.buy.type==='house'?`<p class="muted">頭期款 ${m(me.buy.down)}；月付佔收入 ${pct(me.buy.dsr,0)}（上限 ${me.buy.dsrLimit}%）</p><button class="goal-btn" data-a="buy" ${me.buy.ok&&!busy?'':'disabled'}>付頭期款買房 ${me.buy.ok?' 🏁':''}</button>`:'';
   return `<section class="phone-card turn"><p class="eyebrow">輪到你了 · 理財時間</p>${last}
-    <div class="action-block"><h4>本季工作量 · 疲勞 ${me.fatigue}</h4><div class="seg-row">${[{level:0,label:'正常上班',income:0},...me.overtimeLevels].map(o=>`<button data-a="overtime" data-v="${o.level}" class="${me.overtime===o.level?'on':''}" ${me.unemployedRounds||busy?'disabled':''}><b>${h(o.label)}</b><small>${o.income?`收入 +${o.income}%`:'疲勞 −20'}</small></button>`).join('')}</div></div>
+    <div class="action-block"><h4>本季工作量</h4>${fatigueMeter(me,true)}<div class="seg-row fatigue-pick">${workOptions(me).map(o=>`<button data-a="overtime" data-v="${o.level}" class="${me.overtime===o.level?'on':''}" ${me.unemployedRounds||busy?'disabled':''}><b>${h(o.label)}</b><small>${o.income?`收入 +${o.income}%`:'收入不變'}</small><small>疲勞 ${o.fatigue>0?'+':'−'}${Math.abs(o.fatigue)}</small><small class="${o.after>=me.fatigueRules.burnout?'over':''}">季末 → ${o.after}${o.after>=me.fatigueRules.burnout?' ⚠':''}</small></button>`).join('')}</div>${me.unemployedRounds?'<p class="muted small">失業期間不能加班。</p>':''}</div>
     ${me.debts.length?`<div class="action-block"><h4>提前還款</h4><select id="repay-debt" class="action-select">${debtOpts}</select><div class="action-row"><input id="repay-amount" type="number" inputmode="decimal" min="0.1" step="0.1" value="${Math.max(0,Math.min(5,Math.floor(me.cash)))}"><button data-a="repay" ${dis}>還款</button></div></div>`:''}
     <div class="action-block"><h4>信用貸款 · 年息 ${pct(me.creditRate,2)}</h4><p class="muted">剩餘額度 ${m(me.creditRoom)}</p><div class="action-row"><input id="borrow-amount" type="number" inputmode="decimal" min="0.1" step="0.1" value="5"><button data-a="borrow" ${me.creditRoom>0&&!busy?'':'disabled'}>借款</button></div></div>
     ${goal}
     <button class="primary big" data-a="end" ${dis}>完成，交給下一位 →</button></section>`;
+}
+// 疲勞規則：結算時疲勞 ≥ 門檻，該季收入 −20%；降回門檻以下就恢復。
+function workOptions(me){
+  const r=me.fatigueRules,clamp=v=>Math.max(0,Math.min(100,v));
+  return [{level:0,label:'正常上班',income:0,fatigue:r.normal},...me.overtimeLevels].map(o=>({...o,after:clamp(me.fatigue+o.fatigue)}));
+}
+function fatigueMeter(me,full){
+  const r=me.fatigueRules,burn=me.fatigue>=r.burnout;
+  return `<div class="fatigue-meter ${burn?'burn':''}"><div class="fatigue-head"><span>疲勞值</span><b>${me.fatigue}<small> / 100</small></b></div><div class="fatigue-bar"><i style="width:${me.fatigue}%"></i><em style="left:${r.burnout}%" title="過勞門檻"></em></div><div class="fatigue-scale"><span>0</span><span style="left:${r.burnout}%">${r.burnout} 過勞</span><span>100</span></div>${full||burn?`<p class="fatigue-rule">${burn?`⚠ 目前過勞：本季收入 ${r.penalty}%。`:''}季結算時疲勞 ≥ ${r.burnout}，那一季收入 ${r.penalty}%，降回 ${r.burnout} 以下就恢復。加班的疲勞季末才加上（⚠＝下一季會過勞）。停在 ☕ 休息站疲勞 ${r.rest}。</p>`:''}</div>`;
 }
 function meCard(){
   const me=priv.me;if(!me)return '';
@@ -126,6 +182,7 @@ function meCard(){
   return `<section class="phone-card me"><div class="me-head"><span class="role-icon">${me.icon}</span><div><h3>${h(priv.name)}</h3><small>${h(me.roleName)} · 只有你看得到</small></div></div>
     <div class="wealth-line"><span>現金</span><strong>${m(me.cash)}</strong></div>
     <div class="goal-line"><div class="goal-line-head"><span>${h(me.goal)}</span><b>${me.progress}%</b></div><div class="goal-track"><i style="width:${me.progress}%"></i></div></div>
+    ${fatigueMeter(me,false)}
     ${badges?`<div class="player-badges">${badges}</div>`:''}
     <div class="finance-grid"><div class="finance-stat negative"><span>總負債</span><strong>${m(me.totalDebt)}</strong></div><div class="finance-stat"><span>本季預估淨額</span><strong>${signed(me.preview.net)}</strong></div><div class="finance-stat"><span>上季收入</span><strong>${me.lastIncome===null?'—':m(me.lastIncome)}</strong></div></div>
     <details class="finance-details"><summary>負債明細與上季收支</summary><table class="flow-table"><tbody>${me.debts.map(d=>`<tr><td>${h(d.name)}</td><td>${m(d.balance)}</td><td>${d.rate}%</td></tr>`).join('')||'<tr><td>沒有負債</td></tr>'}</tbody></table><table class="flow-table"><tbody>${(me.lastBreakdown||[]).map(l=>`<tr><td>${h(l.label)}</td><td>${signed(l.amount)}</td></tr>`).join('')||'<tr><td>尚未結算</td></tr>'}</tbody></table></details></section>`;
@@ -133,7 +190,7 @@ function meCard(){
 
 document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-a]');if(!b||b.disabled)return;
-  const a=b.dataset.a;
+  const a=b.dataset.a;Sound.play('click');
   if(a==='join'){
     const next=($('#code').value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4);
     if(next.length!==4)return toast('請輸入 4 碼房號。');
@@ -156,5 +213,6 @@ document.addEventListener('click',async e=>{
 });
 document.addEventListener('change',async e=>{if(e.target.id==='my-role'){const res=await request('setRole',{roleId:e.target.value});if(!res.ok&&res.error)toast(res.error)}});
 // 手機從背景回來時，若連線已斷就重新連。
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&code&&!kicked&&!conn?.open)connect()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)return;keepAwake();if(code&&!kicked&&!conn?.open)connect()});
+$('#snd').addEventListener('click',()=>{Sound.unlock();Sound.setPref('sfx',!Sound.pref.sfx);soundBtn();Sound.play('click')});soundBtn();
 render();connect();

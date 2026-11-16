@@ -32,19 +32,108 @@
 .bot-add{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px}
 .bot-add select{height:40px;border:1px solid #dfe3e0;border-radius:8px;padding:0 10px;background:#fff;flex:1;min-width:120px}
 
-/* ---------- 大螢幕：遊戲中 ---------- */
-.host-grid{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(320px,.85fr);gap:18px;padding:26px 0 40px;align-items:start}
-.host-grid .board-center h3{font-size:30px}
+/* ---------- 大螢幕：遊戲中（上：動態列；左：局況；中：棋盤；右：玩家） ---------- */
+.host-page .app-shell{max-width:1880px}
+.host-stage{padding:16px 0 30px;display:grid;gap:14px}
+.host-cols{display:grid;grid-template-columns:minmax(230px,280px) minmax(0,1fr) minmax(250px,310px);grid-template-areas:"left board right";gap:16px;align-items:start}
+.host-left{grid-area:left}.host-board{grid-area:board}.host-right{grid-area:right}
+.host-left,.host-right{display:grid;gap:14px}
+.host-left .panel,.host-right .panel{padding:16px}
+.host-left .turn-panel{padding:18px}.host-left .turn-name{font-size:22px}.host-left .turn-role{margin-bottom:6px}
+.host-left .mini-economy{gap:7px}.host-left .mini-stat{padding:8px 10px}.host-left .mini-stat strong{font-size:16px}
+.host-left .econ-banner{margin:0 0 10px}
+.host-board{padding:16px 18px}
+.host-board .panel-title{margin-bottom:10px;align-items:center}.host-board .panel-title .eyebrow{display:none}.host-board .panel-title h2{font-size:18px;margin:0}
+/* 棋盤外圈的格子比中央大一點（1.3 倍），中央仍保留給拉霸、卡片等局況。寬度同時受螢幕高度限制，一畫面看得完。 */
+.host-board .board{grid-template-columns:1.3fr repeat(5,minmax(0,1fr)) 1.3fr;grid-template-rows:1.3fr repeat(5,minmax(0,1fr)) 1.3fr;width:min(100%,calc((100vh - 270px)*1.21));min-width:min(100%,480px);margin-inline:auto;gap:5px}
+.host-board .tile{padding:6px 7px;display:block;line-height:1.2}
+.host-board .tile-number{margin-right:5px}.host-board .tile-tag{display:inline-block;margin-left:4px;vertical-align:1px}
+.host-board .tile-number{font-size:10px}.host-board .tile-type{font-size:12px}.host-board .tile-icon{font-size:15px;position:absolute;top:6px;right:7px}
+.host-board .tile-tag{font-size:9px}
+.host-board .tile-tokens{left:4px;right:4px;bottom:4px;flex-wrap:nowrap;gap:3px;align-items:flex-end}
+.host-board .tile-tokens.crowded{gap:0}.host-board .tile-tokens.crowded .pawn+.pawn{margin-left:-15px}
+.host-board .tile-active{box-shadow:0 0 0 3px #2fb8a2;transform:translateY(-1px)}
+.host-board .board-center{padding:14px}
+.host-board .board-center h3{font-size:26px}
+/* 頭像棋子：玩家顏色的圓＋角色圖示；輪到的玩家放大並有光圈。 */
+.pawn{--c:#0f9688;flex:none;width:28px;height:28px;border-radius:50%;background:var(--c);display:grid;place-items:center;border:2px solid #fff;box-shadow:0 2px 6px #13283566;position:relative}
+.pawn>span{font-size:15px;line-height:1;filter:drop-shadow(0 1px 0 #0003)}
+.pawn.current{width:36px;height:36px;z-index:2;box-shadow:0 0 0 3px var(--c),0 4px 12px #13283580}
+.pawn.current>span{font-size:19px}
+.pawn.current::after{content:'';position:absolute;inset:-7px;border-radius:50%;border:2px solid var(--c);opacity:.6;animation:pawn-pulse 1.6s ease-out infinite}
+.pawn.moving{animation:pawn-hop .24s ease-out}
+.pawn.big{width:40px;height:40px}.pawn.big>span{font-size:20px}
+@keyframes pawn-hop{0%{transform:translateY(0) scale(1)}45%{transform:translateY(-12px) scale(1.08)}100%{transform:translateY(0) scale(1)}}
+@keyframes pawn-pulse{0%{transform:scale(.85);opacity:.7}100%{transform:scale(1.35);opacity:0}}
 .pub-players{display:grid;gap:8px;margin-bottom:8px}
 .pub-player{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid #e3e9e5;border-left:4px solid var(--player-color);border-radius:10px;background:#fff}
+.pub-player .chip-text{flex:1;min-width:0}
 .pub-player.current{background:#f1f8f5;box-shadow:0 0 0 2px #88cfc0}
 .pub-player.bankrupt{opacity:.5;filter:grayscale(.7)}
 .pub-prog{font-weight:900;color:var(--teal-dark);font-size:15px}
+.ping{animation:ping-glow 3.2s ease-out both}
+@keyframes ping-glow{0%,30%{box-shadow:0 0 0 3px #f2b84b,0 0 18px #f2b84b99;background:#fff8e6}100%{}}
+.rules-mini h3{margin:0 0 8px;font-size:14px}
+.rules-mini ul{margin:0;padding-left:18px;display:grid;gap:5px;font-size:12px;line-height:1.55;color:#5d6f72}
+.rules-mini b{color:var(--ink)}
 .slot-machine.is-rolling .slot-reel{border-color:#73e0b6;box-shadow:inset 0 3px 7px #153b2e1a,0 0 14px #6ce7aa99;animation:reel-shake .18s linear infinite}
 @keyframes reel-shake{50%{transform:translateY(-3px)}}
-.host-grid .log-list{max-height:260px}
-@media(max-width:1100px){.host-grid,.lobby{grid-template-columns:1fr}}
-@media(prefers-reduced-motion:reduce){.slot-machine.is-rolling .slot-reel{animation:none}}
+
+/* 上方動態列：最新一則最大，新動態彈出；重大事件整條閃一下顏色。 */
+.ticker{display:flex;align-items:center;gap:12px;padding:10px 12px;background:#142835;border-radius:12px;color:#fff;min-height:58px;overflow:hidden}
+.ticker-label{flex:none;font-size:11px;font-weight:900;letter-spacing:.14em;color:#73d4c7;writing-mode:horizontal-tb}
+.ticker-items{flex:1;min-width:0;display:flex;gap:10px;align-items:center;overflow:hidden}
+.tick{display:flex;align-items:center;gap:8px;min-width:0;padding:6px 12px;border-radius:9px;background:#203b48;color:#c7d8d8;font-size:13px;flex:0 1 auto}
+.tick .tick-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tick small{color:#7fa3a6;font-size:10px;margin-right:6px}
+.tick.lead{flex:1 1 auto;background:#fff;color:var(--ink);font-size:16px;font-weight:800;padding:8px 14px}
+.tick.lead small{color:#8a9a98}
+.tick-icon{flex:none;font-size:17px}
+.tick:not(.lead){max-width:28%}
+.tick.lead.bad{background:#fdecea;color:#8f3329}.tick.lead.good{background:#e3f4ee;color:#0d6c60}.tick.lead.social{background:#e8eefb;color:#2f4c80}.tick.lead.econ{background:#fdf5e1;color:#7c5a10}
+.tick.fresh{animation:tick-in .45s cubic-bezier(.2,1.3,.4,1) both}
+@keyframes tick-in{0%{transform:translateY(-14px) scale(.96);opacity:0}100%{transform:none;opacity:1}}
+.ticker.flash{animation:ticker-flash 3.2s ease-out both}
+.ticker.flash.bad{--flash:#c55d5d}.ticker.flash.good{--flash:#0e9186}.ticker.flash.social{--flash:#5979b0}.ticker.flash.econ{--flash:#c99a2e}
+/* 閃色時標籤改白字 */
+.ticker.flash .ticker-label{color:#fff}
+@keyframes ticker-flash{0%,25%{background:var(--flash);box-shadow:0 0 0 3px var(--flash),0 8px 26px #0003}100%{background:#142835}}
+.ticker-all{flex:none;background:#2c4a57;color:#e3f6ef;border:1px solid #4b6670;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:800}
+.ticker-all:hover{background:#3a5f6d}
+/* 全部動態（彈出視窗） */
+.log-dialog{border:0;border-radius:14px;padding:0;width:min(640px,92vw);max-height:80vh;box-shadow:0 20px 60px #0005}
+.log-dialog::backdrop{background:#0d1a2280}
+.log-dialog-head{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid #e3e9e5;position:sticky;top:0;background:#fff}
+.log-dialog-head h3{margin:0}
+.log-all{padding:10px 18px 18px;display:grid;gap:6px}
+.log-all .log-item{display:flex;gap:8px;font-size:13px;line-height:1.55;padding:6px 8px;border-radius:7px}
+.log-all .log-item small{color:#8a9a98}
+.log-all .log-item.bad{background:#fdf3f1}.log-all .log-item.good{background:#eff8f4}.log-all .log-item.social{background:#f1f4fb}.log-all .log-item.econ{background:#fdf8ea}
+
+/* 中尺寸（平板橫放、小筆電）：棋盤＋右欄，局況移到右欄下方。 */
+@media(max-width:1279px){
+  .host-cols{grid-template-columns:minmax(0,1fr) minmax(250px,290px);grid-template-areas:"board left" "board right"}
+  .host-board{grid-row:1/3}
+  .host-left .rules-mini{display:none}
+}
+/* 窄螢幕（平板直放、手機）：全部直排，棋盤在最上面。 */
+@media(max-width:900px){
+  .host-cols{grid-template-columns:1fr;grid-template-areas:"board" "right" "left"}
+  .host-board{grid-row:auto}
+  .host-board .board{width:100%;min-width:0}
+  .tick:not(.lead){display:none}
+  .ticker-label{display:none}
+}
+@media(max-width:640px){
+  .host-board{padding:10px}
+  .host-board .board{gap:3px}
+  .host-board .tile{padding:3px 4px}.host-board .tile-type{font-size:8px}.host-board .tile-number{font-size:7px}.host-board .tile-icon{display:none}
+  .pawn{width:18px;height:18px;border-width:1px}.pawn>span{font-size:10px}.pawn.current{width:22px;height:22px}.pawn.current>span{font-size:12px}
+  .host-board .tile-tokens.crowded .pawn+.pawn{margin-left:-11px}
+  .tick.lead{font-size:13px}
+}
+@media(max-width:1100px){.lobby{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.slot-machine.is-rolling .slot-reel,.pawn.moving,.pawn.current::after,.tick.fresh,.ticker.flash,.ping{animation:none}}
 
 /* ---------- 手機 ---------- */
 .join-page{background:#eef1ec;min-height:100vh}
@@ -81,3 +170,59 @@
 .phone-card .finance-stat strong{font-size:15px}
 .warn-note{font-size:12px;line-height:1.6;color:#9a4a3f;background:#fdecea;border:1px solid #f3cfc9;border-radius:8px;padding:8px 10px;text-align:left}
 .conn:not(.on):not(.off){background:#fff7e6;color:#9a6a12}
+
+/* 手機：疲勞值與工作量選項（覆蓋單機版在窄螢幕隱藏小字的設定） */
+.join-page .seg-row button{padding:9px 4px;gap:1px}
+.join-page .seg-row button b{font-size:14px}
+.join-page .seg-row button small{display:block;font-size:11px;color:#b1c5c7;line-height:1.35}
+.join-page .seg-row button small.over{color:#ffb3a8;font-weight:800}
+.fatigue-meter{margin:6px 0 10px}
+.fatigue-head{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:800;color:#6e7f80}
+.fatigue-head b{font-size:18px;color:var(--ink)}.fatigue-head b small{font-size:11px;color:#8a9a98}
+.phone-card.turn .fatigue-head{color:#b1c5c7}.phone-card.turn .fatigue-head b{color:#fff}
+.fatigue-bar{position:relative;height:10px;border-radius:9px;background:#e3e9e5;margin:6px 0 4px;overflow:visible}
+.phone-card.turn .fatigue-bar{background:#35515b}
+.fatigue-bar i{display:block;height:100%;border-radius:9px;background:#f0c36b;max-width:100%}
+.fatigue-meter.burn .fatigue-bar i{background:#e8705f}
+.fatigue-bar em{position:absolute;top:-3px;bottom:-3px;width:2px;background:#c55d5d;border-radius:2px}
+.fatigue-scale{position:relative;height:14px;font-size:10px;color:#8a9a98}
+.fatigue-scale span{position:absolute;top:0}.fatigue-scale span:first-child{left:0}.fatigue-scale span:last-child{right:0}
+.fatigue-scale span:nth-child(2){transform:translateX(-50%);color:#c55d5d;font-weight:800;white-space:nowrap}
+.fatigue-rule{font-size:12px!important;line-height:1.6;margin:6px 0 0;color:#6e7f80}
+.phone-card.turn .fatigue-rule{color:#c7d8d8!important}
+.fatigue-meter.burn .fatigue-rule{color:#b24d43}
+.phone-card.turn .fatigue-meter.burn .fatigue-rule{color:#ffb3a8!important}
+/* 平板：手機頁面加寬，選項與數字放大 */
+@media(min-width:700px){
+  .phone-main{max-width:680px;padding:22px 22px 50px}
+  .phone-card{padding:24px}
+  .phone-card h2{font-size:26px}
+  .join-page .seg-row button{padding:12px 6px}
+  .join-page .seg-row button b{font-size:16px}.join-page .seg-row button small{font-size:12px}
+  .phone-card .finance-stat strong{font-size:18px}
+}
+/* 大螢幕投影：棋子跟著格子放大 */
+@media(min-width:1600px) and (min-height:950px){
+  .host-board .pawn{width:36px;height:36px}.host-board .pawn>span{font-size:19px}
+  .host-board .pawn.current{width:46px;height:46px}.host-board .pawn.current>span{font-size:24px}
+  .host-board .tile-tokens.crowded .pawn+.pawn{margin-left:-19px}
+  .host-board .tile-type{font-size:14px}
+}
+
+/* ---------- 聲音控制 ---------- */
+.sound-ctrl{display:inline-flex;align-items:center;gap:2px}
+.sound-ctrl #vol{width:80px;accent-color:var(--teal)}
+.sound-ctrl button[aria-pressed=false]{opacity:.55}
+.sound-unlock{position:fixed;left:20px;bottom:20px;z-index:40;background:#142835;color:#fff;border:0;border-radius:30px;padding:12px 18px;font-size:14px;font-weight:800;box-shadow:0 8px 24px #0004;animation:unlock-bob 1.6s ease-in-out infinite}
+@keyframes unlock-bob{50%{transform:translateY(-4px)}}
+.wait-note{margin:8px 0 0;font-size:13px;font-weight:800;color:#ffcf7a;min-height:0}
+.wait-note:empty{display:none}
+@media(max-width:1000px){.sound-ctrl #vol{display:none}}
+/* 手機：右上角音效開關、輪到自己時閃光與按鈕呼吸 */
+.phone-top-right{display:flex;align-items:center;gap:8px}
+.snd-btn{width:34px;height:34px;border-radius:50%;border:1px solid #35515b;background:#203b48;color:#fff;font-size:16px;display:grid;place-items:center;padding:0}
+body.turn-flash::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:50;border:6px solid #73e0b6;box-shadow:inset 0 0 60px #73e0b6aa;animation:turn-flash 2.4s ease-out both}
+@keyframes turn-flash{0%,15%{opacity:1}30%{opacity:.35}45%{opacity:1}100%{opacity:0}}
+.phone-card.turn .primary.big:not(:disabled){animation:btn-breathe 1.8s ease-in-out infinite}
+@keyframes btn-breathe{50%{box-shadow:0 0 0 5px #73e0b655,0 0 22px #73e0b6aa}}
+@media(prefers-reduced-motion:reduce){.sound-unlock,body.turn-flash::after,.phone-card.turn .primary.big{animation:none}}

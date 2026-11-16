@@ -70,3 +70,11 @@ test('房間可以存檔與還原：重新整理大螢幕後座位、憑證與�
   assert.equal(back.game.round,r.game.round);assert.equal(back.game.phase,r.game.phase);
   assert.throws(()=>Room.fromJSON({v:2}),/格式/);
 });
+test('公開動態帶有總則數：畫面只收最近 60 則，但 logCount 一直增加，用來判斷新動態',()=>{
+  const r=new Room('ABCD');const humans=[r.addHuman({name:'甲',roleId:'low'}),r.addHuman({name:'乙',roleId:'free'})];
+  r.start({maxRounds:12});playUntilDone(r,humans);
+  const v=r.publicView().game;
+  assert.ok(v.log.length<=60);assert.ok(v.logCount>=v.log.length);
+  assert.equal(v.logCount,r.game.log.filter(x=>!/提前償還|申請信用貸款|自動動用信用貸款/.test(x)).length);
+  assert.ok(v.log.every(x=>!/申請信用貸款|自動動用信用貸款/.test(x)));
+});

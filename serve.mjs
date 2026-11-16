@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8'};
 const assets=new Set(['index.html',...['enterprise','personal'].flatMap(m=>[`${m}/index.html`,`${m}/styles.css`,`${m}/game.js`]),
-  ...['host.html','join.html','host.js','join.js','common.js','core.js','online.css','index.html','vendor/peerjs-1.5.2.min.js','vendor/qrcode-generator-1.4.4.js'].map(f=>`online/${f}`)]);
+  ...['host.html','join.html','host.js','join.js','common.js','sound.js','core.js','online.css','index.html','vendor/peerjs-1.5.2.min.js','vendor/qrcode-generator-1.4.4.js'].map(f=>`online/${f}`)]);
 const port=4173;
 
 createServer(async(req,res)=>{

@@ -715,6 +715,7 @@ const newToken=()=>Array.from(randomBytes(16),b=>b.toString(16).padStart(2,'0'))
 const round1=n=>Math.round(n*10)/10;
 // 公開紀錄不顯示個人理財操作的金額。
 const PRIVATE_LOG=/提前償還|申請信用貸款|自動動用信用貸款/;
+const LOG_KEEP=60;   // 傳給畫面的最近動態則數；logCount 是公開動態的總數，用來判斷有幾則新的
 
 class Room{
   constructor(code,{mode='personal'}={}){
@@ -819,7 +820,7 @@ class Room{
     const seats=this.seats.map(s=>({seatId:s.seatId,name:s.name,roleId:s.roleId,isBot:!!s.bot,botLabel:s.bot?botLabel(s.bot):'',connected:s.bot?true:s.connected}));
     const base={code:this.code,mode:this.mode,maxRounds:this.maxRounds,seats,roles:ROLES.map(r=>({id:r.id,name:r.name,icon:r.icon,title:r.title,goal:r.goal.text})),botLevels:Object.entries(BOT_LEVELS).map(([id,v])=>({id,label:v.label,desc:v.desc}))};
     if(!g)return {...base,status:'lobby'};
-    const cur=this.currentPlayer(),regime=economyRegime(g),last=g.decisions.at(-1);
+    const cur=this.currentPlayer(),regime=economyRegime(g),last=g.decisions.at(-1),publicLog=g.log.filter(x=>!PRIVATE_LOG.test(x));
     const card=g.lastDraw?cardById(g.lastDraw.cardId):null;
     return {...base,status:g.status,
       game:{round:g.round,maxRounds:g.maxRounds,turnIndex:g.turnIndex,phase:g.phase,dice:g.dice,reels:g.reels,winnerIds:g.winnerIds,winReason:g.winReason,
@@ -832,7 +833,7 @@ class Room{
         // 機會卡的選項與機率只給輪到的玩家；大螢幕只看到「正在考慮」與結果。
         result:g.lastResult?{text:g.lastResult.text,option:g.lastResult.option||''}:null,
         decision:last?{action:last.action,ruleId:last.ruleId}:null,
-        log:g.log.filter(x=>!PRIVATE_LOG.test(x)).slice(0,14)}};
+        log:publicLog.slice(0,LOG_KEEP),logCount:publicLog.length}};
   }
   // 只給本人的資料：現金、負債、收支預估、輪到自己時可以做的操作。
   privateView(token){
@@ -856,7 +857,8 @@ class Room{
         preview:{earned:q.earned,living:q.living,debt:q.debt,net:q.net},
         creditRoom:Math.max(0,creditLimit(p)-creditUsed(p)),creditRate:g.economy.rate+8,
         buy:{ok:buy.ok,type:r.goal.type,price:p.roleId==='office'?g.economy.carPrice:hp?.price??null,down:hp?.down??null,dsr:hp?.dsr??null,dsrLimit:r.goal.dsr??null},
-        overtimeLevels:Object.entries(OVERTIME).map(([lv,o])=>({level:Number(lv),label:o.label,income:o.income}))},
+        overtimeLevels:Object.entries(OVERTIME).map(([lv,o])=>({level:Number(lv),label:o.label,income:o.income,fatigue:FATIGUE[`overtime${lv}`]})),
+        fatigueRules:{normal:FATIGUE.none,rest:FATIGUE.restStop,burnout:FATIGUE.burnout,penalty:FATIGUE.burnoutIncome}},
       choice:card?{id:card.id,name:card.name,desc:card.desc||'',options:chanceOptions(g,p,card).map(o=>({index:o.index,label:o.label,stake:o.stake,affordable:o.affordable,odds:o.outcomes.map(x=>({p:x.p,text:x.text}))}))}:null};
   }
 }
