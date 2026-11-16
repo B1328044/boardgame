@@ -1,0 +1,12 @@
+{
+  "name": "finance-board-games",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node enterprise/build.mjs && node personal/build.mjs && node online/build.mjs",
+    "serve": "node serve.mjs",
+    "test": "node --test",
+    "simulate:enterprise": "node enterprise/simulate.mjs",
+    "simulate:personal": "node personal/simulate.mjs"
+  }
+}

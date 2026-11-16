@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111b28">
+  <title>人生棋局 · 大螢幕</title>
+  <link rel="stylesheet" href="../personal/styles.css">
+  <link rel="stylesheet" href="./online.css">
+</head>
+<body class="host-page">
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand"><div id="round-badge" class="round-badge" hidden><span>目前季數</span><strong id="round-number">01</strong><small id="round-limit"></small></div><div><strong>人生棋局 · 連線版</strong><small>HOST SCREEN</small></div></div>
+      <div class="top-actions"><span id="conn" class="conn">連線中…</span><span id="room-chip" class="room-chip" hidden></span><a class="quiet" href="../index.html">單機版</a><button id="lobby-btn" class="quiet" type="button" hidden>回到大廳</button><button id="close-btn" class="quiet" type="button" hidden>關閉房間</button></div>
+    </header>
+    <main id="view"></main>
+  </div>
+  <script src="./vendor/peerjs-1.5.2.min.js"></script>
+  <script src="./vendor/qrcode-generator-1.4.4.js"></script>
+  <script src="./core.js"></script>
+  <script src="./common.js"></script>
+  <script src="./host.js"></script>
+</body>
+</html>
