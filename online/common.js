@@ -9,7 +9,8 @@ const pct=(n,d=1)=>`${Number(n).toFixed(d)}%`;
 const COLORS=['#0f9688','#5979b0','#ce9460','#aa6b91','#c55d5d','#7e9541','#348da5','#7a60ad'];
 const TYPE_LABEL={fortune:'好運',market:'市場',chance:'機會',loss:'災難',start:'休息站'};
 const TYPE_ICON={fortune:'✦',market:'◎',chance:'?',loss:'⚠',start:'☕'};
-const PHASE_TEXT={roll:'準備拉霸',draw:'準備抽卡',choice:'正在考慮機會卡',manage:'理財中',skip:'暫停一回合',finished:'對局結束'};
+const PHASE_TEXT={roll:'準備拉霸',draw:'準備抽卡',choice:'正在考慮機會卡',respond:'等待對方回覆',manage:'理財中',skip:'暫停一回合',finished:'對局結束'};
+const respondWait=r=>r?`等 ${r.to} ${r.type==='alliance'?'決定要不要合作':'決定要不要反制'}…`:'';
 const WIN_TEXT={goal:'達成目標',progress:'季數用完，目標進度最高',survivor:'其他玩家都破產',bankruptcy:'所有玩家都破產'};
 function boardCoords(i){if(i<=6)return [1,i+1];if(i<=12)return [i-5,7];if(i<=18)return [7,19-i];return [25-i,1]}
 /* 動態分類：大螢幕與手機用來決定提示顏色、音效與震動 */

@@ -8,22 +8,22 @@ export const UNIT='萬';
 // salary：每季稅後收入；living：每季生活費（隨物價指數上升）；debts：起始負債。
 // rate 為年利率（%），payment 為每季應繳；variable=true 代表跟著央行利率浮動。
 export const ROLES=[
-  {id:'low',name:'底層',title:'基層服務業',icon:'🧹',incomeType:'salary',salary:9,living:4.4,cash:5,
+  {id:'low',name:'底層',title:'基層服務業',icon:'🧹',incomeType:'salary',salary:9,living:4.1,cash:5,
     debts:[{type:'student',name:'學貸',balance:36,rate:1.5,payment:1.5}],
     goal:{type:'debtFree',amount:50,text:'清空所有負債，且存款至少 50 萬'},
     story:'月薪三萬出頭，每個月先繳學貸再算生活費。沒有房貸壓力，但也沒有太多犯錯空間。',
     traits:['收入最低、最穩定','基本工資調漲時直接受惠','被裁員時有失業給付']},
-  {id:'office',name:'上班族',title:'一般企業職員',icon:'💼',incomeType:'salary',salary:16.5,living:11,cash:15,
+  {id:'office',name:'上班族',title:'一般企業職員',icon:'💼',incomeType:'salary',salary:16.5,living:10.8,cash:15,
     debts:[{type:'student',name:'學貸',balance:20,rate:1.5,payment:1.2},{type:'card',name:'信用卡分期',balance:8,rate:15,payment:1.5}],
     goal:{type:'car',amount:100,text:'一次付清買下一台 100 萬的車'},
     story:'朝九晚五，年資慢慢墊高薪水。手上還有學貸和一筆信用卡分期，存夠錢就想換一台好車。',
     traits:['每年依景氣調薪','車價會隨物價與車市事件變動','信用卡分期利率高，先還划算']},
-  {id:'exec',name:'公司高管',title:'企業高階主管',icon:'🏙️',incomeType:'salary',salary:45,living:18.5,cash:100,bonusMonths:2,
+  {id:'exec',name:'公司高管',title:'企業高階主管',icon:'🏙️',incomeType:'salary',salary:45,living:20,cash:100,bonusMonths:2,
     debts:[{type:'mortgage',name:'房貸',balance:900,rate:2.6,payment:10.8,variable:true},{type:'auto',name:'車貸',balance:60,rate:3,payment:4.5}],
     goal:{type:'house',amount:1000,downPct:30,dsr:50,text:'買下一棟 1,000 萬的房子（頭期款 30%，銀行核貸）'},
     story:'收入最高，負債也最大。每季先付房貸車貸，年終獎金看景氣。想換大房子，銀行還得點頭。',
     traits:['年終獎金隨景氣浮動','房貸利率跟著央行走','買房需頭期款且月付不超過收入 50%']},
-  {id:'free',name:'自由業',title:'接案工作者',icon:'🎨',incomeType:'freelance',salary:17.4,living:7.8,cash:20,
+  {id:'free',name:'自由業',title:'接案工作者',icon:'🎨',incomeType:'freelance',salary:17.4,living:8,cash:20,
     debts:[{type:'card',name:'信用卡循環',balance:12,rate:15,payment:2}],
     goal:{type:'streak',amount:18,rounds:5,text:'連續 5 季收入都超過 18 萬（月入 6 萬）'},
     story:'案子多的時候月入破十萬，沒案子的時候只能吃老本。收入完全看景氣和自己的拼勁。',
@@ -51,7 +51,7 @@ export const FORTUNE_CARDS=[
   {id:'F05',name:'尾牙抽中大獎',weight:10,cash:5,desc:'抽中一台機車，轉賣換現金。自由業則是大客戶年底送的紅包。'},
   {id:'F06',name:'二手拍賣賺一筆',weight:10,cash:2,desc:'把家裡用不到的東西上網拍賣。'},
   {id:'F07',name:'刮刮樂中 10 萬',weight:6,cash:10,desc:'順手買的刮刮樂，刮出十萬。'},
-  {id:'F08',name:'繼承遠房親戚遺產',weight:1.5,cash:80,desc:'從沒見過面的叔公留了一筆錢給你。'},
+  {id:'F08',name:'繼承遠房親戚遺產',weight:1.5,cash:{low:15,office:25,exec:60,free:25},desc:'從沒見過面的叔公留了一筆錢給你。金額約一季半的收入，足夠改善生活，但不會讓人一夕達標。'},
   {id:'F09',name:'統一發票千萬特獎',weight:.15,cash:1000,desc:'千萬特獎！全台每期只有幾張。'},
   {id:'F10',name:'威力彩頭獎',weight:.05,cash:3000,desc:'中獎機率約兩千兩百萬分之一，你就是那個人。'}
 ];
@@ -88,11 +88,11 @@ export const MARKET_EVENTS=[
 // flatIncome（每季固定額外收入）、fatigue（疲勞）、unemployed（失業季數）、investment、insurance、skip、delayedCash。
 export const CHANCE_CARDS=[
   {id:'C01',name:'朋友報明牌',desc:'朋友說某檔股票下個月一定漲，問你要不要跟。',options:[
-    {label:'投入 5 萬',stake:5,outcomes:[{p:.45,stakeX:1.8,text:'真的漲了！賺了八成。'},{p:.55,stakeX:.5,text:'消息是假的，認賠一半出場。'}]},
-    {label:'投入 20 萬',stake:20,outcomes:[{p:.45,stakeX:1.8,text:'真的漲了！賺了八成。'},{p:.55,stakeX:.5,text:'消息是假的，認賠一半出場。'}]},
+    {label:'投入 5 萬',stake:5,outcomes:[{p:.35,stakeX:1.8,text:'真的漲了！賺了八成。'},{p:.65,stakeX:.5,text:'消息是假的，認賠一半出場。'}]},
+    {label:'投入 20 萬',stake:20,outcomes:[{p:.35,stakeX:1.8,text:'真的漲了！賺了八成。'},{p:.65,stakeX:.5,text:'消息是假的，認賠一半出場。'}]},
     {label:'不跟',stake:0,outcomes:[{p:1,text:'你沒有跟。'}]}]},
   {id:'C02',name:'聽到併購小道消息',desc:'聽說某家公司要被收購，股價會大漲。',options:[
-    {label:'買進 10 萬',stake:10,outcomes:[{p:.4,stakeX:2,text:'併購成真，股價翻倍。'},{p:.6,stakeX:.6,text:'只是謠言，股價回落。'}]},
+    {label:'買進 10 萬',stake:10,outcomes:[{p:.3,stakeX:2,text:'併購成真，股價翻倍。'},{p:.7,stakeX:.5,text:'只是謠言，股價跌回一半。'}]},
     {label:'不相信',stake:0,outcomes:[{p:1,text:'你決定不碰。'}]}]},
   {id:'C03',name:'朋友邀你合夥開店',desc:'朋友想開手搖飲料店，缺一位出資股東。',options:[
     {label:'投資 30 萬',stake:30,outcomes:[{p:.6,investment:{name:'飲料店股份',value:30,income:3},text:'生意不錯，每季分紅 3 萬。'},{p:.4,text:'開幕半年就收了，本金全虧。'}]},
@@ -110,8 +110,8 @@ export const CHANCE_CARDS=[
     {label:'加入（6 萬）',stake:6,outcomes:[{p:.08,stakeX:4,text:'你是少數真的賺到錢的人。'},{p:.92,text:'貨賣不出去，6 萬全賠。'}]},
     {label:'拒絕',stake:0,outcomes:[{p:1,text:'你看穿了這是老鼠會。'}]}]},
   {id:'C07',name:'加密貨幣暴漲傳聞',desc:'網路上都在說某個幣要上天了。',options:[
-    {label:'投入 10 萬',stake:10,outcomes:[{p:.3,stakeX:3,text:'真的漲了三倍！'},{p:.7,stakeX:.25,text:'幣價崩盤，只剩兩成五。'}]},
-    {label:'投入 30 萬',stake:30,outcomes:[{p:.3,stakeX:3,text:'真的漲了三倍！'},{p:.7,stakeX:.25,text:'幣價崩盤，只剩兩成五。'}]},
+    {label:'投入 10 萬',stake:10,outcomes:[{p:.25,stakeX:3,text:'真的漲了三倍！'},{p:.75,stakeX:.2,text:'幣價崩盤，只剩兩成。'}]},
+    {label:'投入 30 萬',stake:30,outcomes:[{p:.25,stakeX:3,text:'真的漲了三倍！'},{p:.75,stakeX:.2,text:'幣價崩盤，只剩兩成。'}]},
     {label:'不碰',stake:0,outcomes:[{p:1,text:'你沒有跟風。'}]}]},
   {id:'C08',name:'保險業務推銷',desc:'投保後每季繳保費，遇到重病、車禍或房屋災害時理賠八成。',options:[
     {label:'投保（每季 0.6 萬）',stake:0,outcomes:[{p:1,insurance:true,text:'保單生效。'}]},
@@ -128,14 +128,22 @@ export const CHANCE_CARDS=[
   {id:'C12',name:'預售屋投資',desc:'建商推出預售屋，訂金 50 萬，完工前可轉手。',options:[
     {label:'下訂（50 萬）',stake:50,outcomes:[{p:.55,stakeX:1.4,text:'房價上漲，轉手賺四成。'},{p:.45,stakeX:.8,text:'房市冷卻，認賠兩成轉手。'}]},
     {label:'不買',stake:0,outcomes:[{p:1,text:'你沒有出手。'}]}]},
-  // 互動卡（移植自企業版 P10 策略聯盟、P14 搶下對手大客戶）：target 選項會依其他玩家展開成多個按鈕。
-  {id:'C13',name:'找人合作',interactive:true,desc:'有個機會需要夥伴。指定一位玩家一起做，雙方收入 +15%，持續 3 季。',options:[
-    {label:'指定一位玩家合作',target:'any',stake:0,outcomes:[{p:1,alliance:{pct:15,rounds:3},text:'合作順利，雙方收入 +15%，持續 3 季。'}]},
+  // 互動卡（移植自企業版 P10 策略聯盟、P14 搶下對手大客戶）：指定對象的選項會依其他玩家展開，對方要回應。
+  // 實際規則與數值在下方 INTERACT；這裡的 outcomes 只用來在介面上說明機率。
+  {id:'C13',name:'找人合作',interactive:true,desc:'邀請一位玩家合作，對方可以拒絕。答應後 75% 合作順利：雙方收入 +15%，持續 3 季，期間任一方的災難損失由另一方分擔 20%；25% 鬧翻：雙方收入 −10%，持續 2 季。被拒絕可以再邀另一位一次，邀到人的話，拒絕你的人收入 −5%，持續 2 季。',options:[
+    {label:'邀請一位玩家合作',invite:true,stake:0,outcomes:[{p:.75,text:'對方答應後：合作順利，雙方收入 +15%，持續 3 季。'},{p:.25,text:'對方答應後：鬧翻，雙方收入 −10%，持續 2 季。'}]},
     {label:'自己來',stake:0,outcomes:[{p:1,text:'你決定自己做。'}]}]},
-  {id:'C14',name:'搶下對方的大案子',interactive:true,desc:'你和另一位玩家同時爭取一個大案子。指定一位玩家，2 季內把對方薪資的 10%（每季最多 3 萬）轉成你的收入。',options:[
-    {label:'指定一位玩家搶案子',target:'any',stake:0,outcomes:[{p:1,steal:{share:.1,cap:3,rounds:2},text:'你搶下了案子，2 季內取得對方薪資的 10%（每季最多 3 萬）。'}]},
+  {id:'C14',name:'搶下對方的大案子',interactive:true,desc:'付 1 萬投標費，搶另一位玩家的案子。成功率看雙方薪水（20%～80%），對方可以花 1 萬反制讓成功率減半；反制後你沒搶到，投標費歸對方。搶到的話 2 季內每季轉走對方薪資的 10%（最多 3 萬）。失業的人沒有案子可搶。搶自己的合作夥伴算背叛：合作立刻結束，對方 70% 告贏求償。',options:[
+    {label:'指定一位玩家搶案子',steal:true,stake:1,outcomes:[{p:.5,text:'搶到案子。'},{p:.5,text:'沒搶到，投標費拿不回來。'}]},
     {label:'不跟人搶',stake:0,outcomes:[{p:1,text:'你決定不跟人搶。'}]}]}
 ];
+
+// 互動卡規則。合作：同一時間只能有一個；背叛過的兩人不能再合作。搶案：同一人一次只能被搶一件，結束後 2 季內不能再被選。
+export const INTERACT={
+  alliance:{accept:.75,pct:15,rounds:3,falloutPct:-10,falloutRounds:2,share:.2,declinePct:-5,declineRounds:2,maxInvites:2},
+  steal:{fee:1,minChance:.2,maxChance:.8,share:.1,cap:3,rounds:2,counterFee:1,immunity:2},
+  lawsuit:{win:.7,pct:15}   // 背叛：被背叛方 70% 勝訴，賠償＝合作剩餘季數 × 15% × 被背叛方平均薪資，案子也要還回來
+};
 
 /* ---------- Loss：毀滅性打擊 ---------- */
 // insured：有保險時的實際損失比例（理賠八成 → 0.2）。
@@ -155,13 +163,15 @@ export const FATIGUE={none:-20,overtime1:10,overtime2:25,burnout:70,burnoutIncom
 export const OVERTIME={1:{income:15,label:'加班'},2:{income:30,label:'爆肝'}};
 export const CREDIT={spread:8,limitQuarters:2};
 // 規則依優先序檢查，採用第一條符合的；利率調整後冷卻 2 季。
+// 謠言類機會卡（C01、C02、C07）期望值刻意設為負：跟風消息長期來看會賠錢。
 export const CENTRAL_BANK_RULES=[
   {id:'R1',name:'通膨失控',test:'inflation>=4',action:+.5,text:'通膨 ≥ 4% → 升息 0.5 個百分點'},
   {id:'R2',name:'經濟衰退',test:'growth<=-2',action:-.5,text:'成長率 ≤ −2% → 降息 0.5 個百分點'},
   {id:'R3',name:'通膨偏高',test:'inflation>=3',action:+.25,text:'通膨 ≥ 3% → 升息 0.25 個百分點'},
   {id:'R4',name:'失業偏高',test:'unemployment>=6',action:-.25,text:'失業率 ≥ 6% → 降息 0.25 個百分點'},
   {id:'R5',name:'股市崩跌',test:'stockDrop>=20',action:-.25,text:'股市單季跌 ≥ 20% → 降息 0.25 個百分點'},
-  {id:'R6',name:'景氣過熱',test:'growth>=4',action:+.25,text:'成長率 ≥ 4% → 升息 0.25 個百分點'}
+  {id:'R6',name:'景氣過熱',test:'growth>=4',action:+.25,text:'成長率 ≥ 4% → 升息 0.25 個百分點'},
+  {id:'R7',name:'回歸中性',test:'rate>=2.5&&inflation<=2.5',action:-.25,text:'利率 ≥ 2.5% 且通膨 ≤ 2.5% → 降息 0.25 個百分點（通膨退燒後把利率慢慢降回中性的 2%）'}
 ];
 export const RATE_BOUNDS=[.125,6];
 

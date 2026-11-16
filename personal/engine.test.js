@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {ROLES,BOARD,FORTUNE_CARDS,MARKET_EVENTS,CHANCE_CARDS,LOSS_CARDS} from './data.js';
-import {createGame,rollDice,drawEvent,resolveChoice,endTurn,setOvertime,repayDebt,borrow,buyGoal,canBuyGoal,housePlan,computeQuarter,settleRound,totalDebt,goalProgress,evaluateCentralBank,exportGame,importGame,chanceOptions,cardById,economyRegime,tileType} from './engine.js';
+import {createGame,rollDice,drawEvent,resolveChoice,endTurn,setOvertime,repayDebt,borrow,buyGoal,canBuyGoal,housePlan,computeQuarter,settleRound,totalDebt,goalProgress,evaluateCentralBank,exportGame,importGame,chanceOptions,cardById,economyRegime,tileType,respond,responder,respondOptions,stealChance,debtDue,quarterlyPayments,baseSalary} from './engine.js';
 
 const game=(roles=['low','office'],extra={})=>createGame({players:roles.map((roleId,i)=>({name:`P${i+1}`,roleId})),seed:42,...extra});
 // 把目前玩家放到指定類型的格子並抽指定卡。
@@ -119,23 +119,132 @@ test('存檔可以匯出與匯入',()=>{
 });
 
 /* ---------- 互動卡與景氣棋盤 ---------- */
-test('C13 找人合作：選項依其他玩家展開，雙方收入都 +15%，持續 3 季',()=>{
+// 讓接下來的亂數依序符合條件（例如 [x=>x<.75] 代表下一個亂數小於 0.75），方便測試機率結果。
+function forceRandom(s,preds){
+  for(let seed=1;seed<2e6;seed++){
+    let x=seed|0,ok=true;
+    for(const f of preds){x^=x<<13;x^=x>>>17;x^=x<<5;x|=0;if(!f((x>>>0)/4294967296)){ok=false;break}}
+    if(ok){s.rng=seed;return}
+  }
+  throw Error('找不到符合的亂數');
+}
+const effect=(p,src)=>p.effects.find(x=>x.source===src);
+test('C13 合作：邀請 → 對方答應 → 75% 順利，雙方收入 +15%，持續 3 季',()=>{
   const s=game(['office','low','free']);land(s,'chance','C13');
   const opts=chanceOptions(s,s.players[0],cardById('C13'));
-  assert.deepEqual(opts.map(o=>o.label),['與 P2 合作','與 P3 合作','自己來']);
+  assert.deepEqual(opts.map(o=>o.label),['邀請 P2 合作','邀請 P3 合作','自己來']);
   const before=computeQuarter(s,s.players[1]).earned;
   resolveChoice(s,'player-1',0);
+  assert.equal(s.phase,'respond');assert.equal(responder(s).id,'player-2');assert.match(respondOptions(s).question,/P1邀請你合作/);
+  assert.throws(()=>respond(s,'player-3',true),/不需要你回覆/);
+  forceRandom(s,[x=>x<.75]);respond(s,'player-2',true);
+  assert.equal(s.phase,'manage');
   assert.equal(computeQuarter(s,s.players[1]).earned,Math.round(before*1.15*100)/100);
-  assert.ok(s.players[0].effects.some(x=>x.source==='C13'&&x.until===3));
+  assert.equal(effect(s.players[0],'C13').partnerId,'player-2');assert.equal(effect(s.players[0],'C13').until,3);
   s.round=4;assert.equal(computeQuarter(s,s.players[1]).earned,before,'第 4 季合作結束');
 });
-test('C14 搶案子：2 季內把對方薪資 10%（每季最多 3 萬）轉成自己的收入',()=>{
-  const s=game(['low','exec']);land(s,'chance','C14');
+test('C13 合作：25% 鬧翻，雙方收入 −10%，持續 2 季，不算合作關係',()=>{
+  const s=game(['office','low']);land(s,'chance','C13');
+  const before=computeQuarter(s,s.players[1]).earned;
+  resolveChoice(s,'player-1',0);forceRandom(s,[x=>x>=.75]);respond(s,'player-2',true);
+  assert.match(s.lastResult.text,/鬧翻/);
+  assert.equal(computeQuarter(s,s.players[1]).earned,Math.round(before*.9*100)/100);
+  assert.equal(effect(s.players[0],'C13'),undefined);assert.equal(effect(s.players[0],'C13-fallout').until,2);
+});
+test('C13 拒絕：可以改邀另一位一次；邀到人的話，拒絕的人收入 −5%；兩人局拒絕沒有風險',()=>{
+  const s=game(['office','low','free']);land(s,'chance','C13');
+  resolveChoice(s,'player-1',0);respond(s,'player-2',false);
+  assert.equal(s.phase,'choice');
+  const opts=chanceOptions(s,s.players[0],cardById('C13'));
+  assert.equal(opts[0].reason,'已經拒絕過你');assert.equal(opts[1].label,'改邀 P3 合作');assert.ok(opts[1].affordable);
+  resolveChoice(s,'player-1',1);forceRandom(s,[x=>x<.75]);respond(s,'player-3',true);
+  assert.equal(effect(s.players[1],'C13-decline').income,-5);assert.equal(effect(s.players[1],'C13-decline').until,2);
+  // 第二次也被拒絕：這張卡結束，不能再邀
+  const t=game(['office','low','free']);land(t,'chance','C13');
+  resolveChoice(t,'player-1',0);respond(t,'player-2',false);resolveChoice(t,'player-1',1);respond(t,'player-3',false);
+  assert.equal(t.phase,'manage');assert.match(t.lastResult.text,/沒找到合作夥伴/);
+  assert.ok(t.players.every(p=>!p.effects.length));
+  const two=game(['office','low']);land(two,'chance','C13');resolveChoice(two,'player-1',0);
+  assert.match(respondOptions(two).no.detail,/兩人局拒絕沒有風險/);
+  respond(two,'player-2',false);assert.equal(two.phase,'manage');
+});
+test('C13 同一時間只能有一個合作；合作期間災難損失（保險後）由夥伴分擔 20%',()=>{
+  const s=game(['office','low','free']);land(s,'chance','C13');
+  resolveChoice(s,'player-1',0);forceRandom(s,[x=>x<.75]);respond(s,'player-2',true);
+  s.turnIndex=2;land(s,'chance','C13');
+  const opts=chanceOptions(s,s.players[2],cardById('C13'));
+  assert.equal(opts[0].reason,'已經有合作對象');assert.equal(opts[1].reason,'已經有合作對象');
+  s.phase='manage';s.pendingChoice=null;
+  s.turnIndex=0;const [me,ally]=s.players,c1=me.cash,c2=ally.cash;
+  land(s,'loss','L01');                      // 重病住院 20 萬，沒有保險
+  assert.equal(me.cash,c1-16);assert.equal(ally.cash,c2-4);assert.match(s.lastResult.text,/P2分擔 4 萬/);
+});
+test('有人破產：合作直接結束，另一方不用負責；他搶來或被搶的案子也結束',()=>{
+  const s=game(['office','low','free']);land(s,'chance','C13');
+  resolveChoice(s,'player-1',0);forceRandom(s,[x=>x<.75]);respond(s,'player-2',true);
+  s.players[2].flatIncomes.push({amount:2,until:5,label:'搶下的案子',victimId:'player-2'});
+  s.players[1].cash=-999;settleRound(s);
+  assert.equal(s.players[1].bankrupt,true);
+  assert.equal(effect(s.players[0],'C13'),undefined);assert.equal(s.players[2].flatIncomes.length,0);
+});
+test('C14 搶案：成功率看雙方薪水（20%～80%），投標費 1 萬；搶到後 2 季每季轉走對方薪資 10%（最多 3 萬）',()=>{
+  const s=game(['low','exec','office']);
+  assert.equal(stealChance(s.players[0],s.players[1]),.2);assert.equal(stealChance(s.players[1],s.players[0]),.8);
+  assert.equal(stealChance(s.players[2],s.players[1]),Math.round(16.5/(16.5+45)*100)/100);
+  land(s,'chance','C14');const cash=s.players[0].cash;
   resolveChoice(s,'player-1',0);
+  assert.equal(s.players[0].cash,cash-1);assert.equal(s.phase,'respond');assert.equal(responder(s).id,'player-2');
+  forceRandom(s,[x=>x<.2]);respond(s,'player-2',false);
   const me=computeQuarter(s,s.players[0]),them=computeQuarter(s,s.players[1]);
   assert.deepEqual(me.lines.find(l=>l.label==='搶下的案子'),{label:'搶下的案子',amount:3});
   assert.deepEqual(them.lines.find(l=>l.label==='被搶走的案子'),{label:'被搶走的案子',amount:-3});
+  assert.equal(s.players[1].stealImmuneUntil,4,'搶完 2 季內不能再被選');
   s.round=3;assert.equal(computeQuarter(s,s.players[0]).lines.some(l=>l.label==='搶下的案子'),false);
+  s.turnIndex=2;land(s,'chance','C14');
+  assert.match(chanceOptions(s,s.players[2],cardById('C14'))[1].reason,/剛被搶過/);
+});
+test('C14 反制：對方花 1 萬讓成功率減半；沒搶到的話投標費歸對方；付不起就不能反制，直接結算',()=>{
+  const s=game(['office','low']);land(s,'chance','C14');
+  resolveChoice(s,'player-1',0);const r=s.pendingResponse.chance,t=s.players[1],c=t.cash;
+  forceRandom(s,[x=>x>=r/2]);respond(s,'player-2',true);
+  assert.match(s.lastResult.text,/反制，成功率降到/);assert.match(s.lastResult.text,/投標費 1 萬 歸P2/);
+  assert.equal(t.cash,c-1+1);
+  const u=game(['office','low']);u.players[1].cash=.5;land(u,'chance','C14');
+  resolveChoice(u,'player-1',0);assert.equal(u.phase,'manage','付不起反制費，不用問直接結算');
+  const v=game(['office','low']);v.players[1].unemployedRounds=1;land(v,'chance','C14');
+  const o=chanceOptions(v,v.players[0],cardById('C14'))[0];
+  assert.equal(o.reason,'失業中，沒有案子可搶');assert.throws(()=>resolveChoice(v,'player-1',0),/失業中/);
+});
+test('背叛：搶自己的合作夥伴，合作立刻結束、不能再合作；對方 70% 告贏，賠償＝剩餘季數 × 15% × 對方薪資，案子還回去',()=>{
+  const s=game(['exec','office','low']);land(s,'chance','C13');
+  resolveChoice(s,'player-1',0);forceRandom(s,[x=>x<.75]);respond(s,'player-2',true);
+  s.phase='manage';s.pendingChoice=null;
+  land(s,'chance','C14');
+  const opt=chanceOptions(s,s.players[0],cardById('C14'))[0];
+  assert.equal(opt.betray,true);assert.match(opt.label,/背叛合作/);
+  const [me,ally]=s.players,c1=me.cash,c2=ally.cash;
+  resolveChoice(s,'player-1',0);forceRandom(s,[x=>x<.4,x=>x<.7]);respond(s,'player-2',false);
+  const comp=Math.round(3*.15*baseSalary(ally)*100)/100;
+  assert.ok(Math.abs(me.cash-(c1-1-comp))<.02);assert.ok(Math.abs(ally.cash-(c2+comp))<.02);
+  assert.equal(effect(me,'C13'),undefined);assert.equal(effect(ally,'C13'),undefined);
+  assert.equal(me.flatIncomes.length,0,'告贏後案子還回去');assert.equal(ally.flatIncomes.length,0);
+  assert.deepEqual(me.feuds,['player-2']);
+  s.phase='manage';land(s,'chance','C13');
+  assert.match(chanceOptions(s,me,cardById('C13'))[0].reason,/背叛/);
+  // 沒搶到也算背叛；官司敗訴就沒有賠償
+  const t=game(['exec','office']);land(t,'chance','C13');resolveChoice(t,'player-1',0);forceRandom(t,[x=>x<.75]);respond(t,'player-2',true);
+  t.phase='manage';land(t,'chance','C14');resolveChoice(t,'player-1',0);
+  const d1=t.players[0].cash;forceRandom(t,[x=>x>=.9,x=>x>=.7]);respond(t,'player-2',false);
+  assert.match(t.lastResult.text,/沒搶到/);assert.match(t.lastResult.text,/敗訴/);assert.equal(effect(t.players[0],'C13'),undefined);assert.equal(t.players[0].cash,d1);
+});
+test('房貸：利率上升到月付金付不起利息時，預估與結算都要把利息繳足',()=>{
+  const s=game(['exec','low']);s.economy.rate=6;
+  const p=s.players[0],m=p.debts.find(d=>d.type==='mortgage'),{interest,pay}=debtDue(s,m);
+  assert.equal(interest,Math.round(900*6.6/400*100)/100);assert.ok(interest>m.payment);assert.equal(pay,interest);
+  assert.ok(quarterlyPayments(s,p)>=interest+4.5);
+  const q=computeQuarter(s,p,{random:.5}),cash=p.cash;settleRound(s);
+  assert.equal(m.balance,900,'只夠付利息，本金不變');
+  assert.ok(Math.abs(p.cash-(cash+q.net))<.02,'實際扣款＝預估扣款');
 });
 test('景氣衰退時第 8、17 格市場格變成災難格；過熱時好運獎金 ×1.5',()=>{
   const s=game(['low','office']);

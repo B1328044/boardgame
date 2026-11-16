@@ -1,4 +1,4 @@
-import {ROLES,BOARD,FORTUNE_CARDS,MARKET_EVENTS,CHANCE_CARDS,LOSS_CARDS,ECONOMY,INSURANCE,FATIGUE,OVERTIME,CREDIT,CENTRAL_BANK_RULES,RATE_BOUNDS,ECON_TILES} from './data.js';
+import {ROLES,BOARD,FORTUNE_CARDS,MARKET_EVENTS,CHANCE_CARDS,LOSS_CARDS,ECONOMY,INSURANCE,FATIGUE,OVERTIME,CREDIT,CENTRAL_BANK_RULES,RATE_BOUNDS,ECON_TILES,INTERACT} from './data.js';
 
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 const round2=n=>Math.round((n+Number.EPSILON)*100)/100;
@@ -38,7 +38,7 @@ export function createGame({players,seed=Date.now(),maxRounds=24}){
     players:players.map((p,i)=>newPlayer(p,names[i],i)),
     economy:{...ECONOMY,priceLevel:1,housePrice:1000,carPrice:100,prevStock:ECONOMY.stock},
     marketActive:[],marketThisRound:null,economyHistory:[],decisions:[],lastRateChangeRound:null,
-    log:[],dice:null,reels:null,lastDraw:null,pendingChoice:null,lastResult:null,status:'playing',winnerIds:[],winReason:null};
+    log:[],dice:null,reels:null,lastDraw:null,pendingChoice:null,pendingResponse:null,lastResult:null,status:'playing',winnerIds:[],winReason:null};
   delete state.economy.noise;
   say(state,'對局開始。');
   return state;
@@ -48,7 +48,7 @@ function newPlayer({roleId,bot},name,i){
   return {id:`player-${i+1}`,name,roleId,bot:bot?{level:bot.level,...(bot.style?{style:bot.style}:{})}:null,color:i,position:0,cash:r.cash,
     debts:r.debts.map((d,k)=>({id:`${d.type}-${k}`,...d})),initialDebt:r.debts.reduce((s,d)=>s+d.balance,0),
     salaryFactor:1,fatigue:0,overtime:0,insured:false,investments:[],effects:[],flatIncomes:[],pendingSalary:[],delayedCash:[],
-    unemployedRounds:0,skipNext:false,streak:0,bestStreak:0,lastIncome:null,lastNet:null,lastBreakdown:null,
+    unemployedRounds:0,skipNext:false,streak:0,feuds:[],stealImmuneUntil:0,bestStreak:0,lastIncome:null,lastNet:null,lastBreakdown:null,
     owns:{car:false,house:false},bankrupt:false,history:[]};
 }
 
@@ -59,7 +59,10 @@ export function debtRate(state,d){
   if(d.type==='credit')return round2(state.economy.rate+CREDIT.spread);
   return d.rate;
 }
-export function quarterlyPayments(state,p){return round2(p.debts.reduce((s,d)=>s+Math.min(d.payment,d.balance+d.balance*debtRate(state,d)/400),0))}
+// 每筆負債本季要繳多少：至少繳清利息（利率上升時月付金不夠付利息，差額也要付），最多繳到還清。
+// 預估（computeQuarter）與季結算都用這一個函式，避免「畫面扣的錢」和「實際扣的錢」不一樣。
+export function debtDue(state,d){const interest=round2(d.balance*debtRate(state,d)/400);return {interest,pay:round2(Math.min(d.balance+interest,Math.max(d.payment,interest)))}}
+export function quarterlyPayments(state,p){return round2(p.debts.reduce((s,d)=>s+debtDue(state,d).pay,0))}
 export const baseSalary=p=>round2(roleById(p.roleId).salary*p.salaryFactor);
 export function creditLimit(p){return round2(roleById(p.roleId).salary*CREDIT.limitQuarters)}
 export function creditUsed(p){return round2(p.debts.filter(d=>d.type==='credit').reduce((s,d)=>s+d.balance,0))}
@@ -84,7 +87,8 @@ export function computeQuarter(state,p,{random=null}={}){
     salary=round2(salary*(.35+1.3*u)*(1+.06*(e.growth-2)));
   }
   let pct=marketPct(state,p.roleId,'income')+p.effects.filter(x=>x.until>=round).reduce((s,x)=>s+(x.income||0),0);
-  if(p.overtime)pct+=OVERTIME[p.overtime].income;
+  // 過勞（疲勞 ≥ 70）時效率很差：收入 −20%，加班也沒有額外收入。
+  if(p.overtime&&p.fatigue<FATIGUE.burnout)pct+=OVERTIME[p.overtime].income;
   if(p.fatigue>=FATIGUE.burnout)pct+=FATIGUE.burnoutIncome;
   let earned=round2(salary*Math.max(.1,1+clamp(pct,-80,150)/100));
   if(p.unemployedRounds>0){
@@ -182,36 +186,84 @@ function applyLoss(state,p,card){
   if(card.wipeInvestments&&p.investments.length){lost+=p.investments.reduce((s,x)=>s+(x.value||0),0);p.investments=[];notes.push('所有投資歸零')}
   else if(card.cost){let c=val(card.cost,p.roleId);if(card.insurable&&p.insured){c=round2(c*(1-INSURANCE.coverage));notes.push('保險理賠八成')}p.cash=round2(p.cash-c);lost+=c}
   if(card.cashPct&&p.cash>0){const c=round2(Math.min(card.cap??Infinity,p.cash*card.cashPct/100));p.cash=round2(p.cash-c);lost+=c}
+  // 合作期間：現金損失（保險理賠後）由夥伴分擔 20%。
+  const cashLost=round2(lost-(card.wipeInvestments?lost:0)),ally=activeAlliance(state,p),partner=ally&&playerById(state,ally.partnerId);
+  if(cashLost>0&&partner&&!partner.bankrupt){
+    const share=round2(cashLost*INTERACT.alliance.share);
+    partner.cash=round2(partner.cash-share);p.cash=round2(p.cash+share);lost=round2(lost-share);
+    notes.push(`${partner.name}分擔 ${money(share)}`);
+  }
   if(card.income)p.effects.push({source:card.id,income:card.income,until:state.round});
   if(card.unemployed){p.unemployedRounds+=val(card.unemployed,p.roleId);notes.push(`失去收入 ${val(card.unemployed,p.roleId)} 季`)}
   if(card.skip){p.skipNext=true;notes.push('下一回合無法行動')}
   state.lastResult={text:[lost?`損失 ${money(lost)}`:'',...notes].filter(Boolean).join('，'),cash:-lost};
   say(state,`${p.name}遭遇「${card.name}」：${state.lastResult.text||'無直接損失'}。`);
 }
-// 互動卡的 target 選項會依其他（未破產的）玩家展開成多個選項，例如「與 玩家 2 合作」。
+/* ---------- 互動卡：合作與搶案 ---------- */
+export function activeAlliance(state,p){return p.effects.find(x=>x.source==='C13'&&x.until>=state.round)||null}
+const allied=(state,a,b)=>activeAlliance(state,a)?.partnerId===b.id;
+const beingRobbed=(state,t)=>t.flatIncomes.some(x=>x.label==='被搶走的案子'&&x.until>=state.round);
+// 搶案成功率：自己的平均薪資 ÷（自己＋對方），限制在 20%～80%。
+export function stealChance(p,t){const S=INTERACT.steal;return round2(clamp(baseSalary(p)/(baseSalary(p)+baseSalary(t)),S.minChance,S.maxChance))}
+export const stealAmount=t=>round2(Math.min(INTERACT.steal.cap,baseSalary(t)*INTERACT.steal.share));
+function inviteBlock(state,p,t,declined){
+  if(declined.includes(t.id))return '已經拒絕過你';
+  if((p.feuds??[]).includes(t.id))return '你們之間有過背叛，不能再合作';
+  if(activeAlliance(state,t))return '已經有合作對象';
+  return '';
+}
+function stealBlock(state,t){
+  if(t.unemployedRounds>0)return '失業中，沒有案子可搶';
+  if(beingRobbed(state,t))return '案子正在被別人搶';
+  if((t.stealImmuneUntil??0)>=state.round)return `剛被搶過，第 ${t.stealImmuneUntil+1} 季後才能再選`;
+  return '';
+}
+// 互動卡的選項會依其他（未破產的）玩家展開成多個選項；不能選的對象會附上原因。
 export function chanceOptions(state,p,card){
-  const list=[];
+  const list=[],A=INTERACT.alliance,S=INTERACT.steal,pc=state.pendingChoice;
+  const declined=pc?.cardId===card.id?pc.declined??[]:[],invites=pc?.cardId===card.id?pc.invites??0:0;
+  const others=state.players.filter(x=>x.id!==p.id&&!x.bankrupt);
   for(const o of card.options){
     const base={label:val(o.label,p.roleId),stake:val(o.stake,p.roleId),outcomes:Array.isArray(o.outcomes)?o.outcomes:o.outcomes[p.roleId]??o.outcomes.default};
-    if(o.target){
-      for(const t of state.players.filter(x=>x.id!==p.id&&!x.bankrupt)){
-        const outcomes=base.outcomes.map(out=>{
-          const x={...out,targetId:t.id};
-          if(out.steal){const amount=round2(Math.min(out.steal.cap??Infinity,baseSalary(t)*out.steal.share));x.flatIncome={amount,rounds:out.steal.rounds,label:'搶下的案子'};x.victim={id:t.id,amount,rounds:out.steal.rounds}}
-          return x;
-        });
-        list.push({...base,label:card.id==='C13'?`與 ${t.name} 合作`:card.id==='C14'?`搶 ${t.name} 的案子`:`${base.label}：${t.name}`,targetId:t.id,outcomes});
+    if(o.invite){
+      const own=activeAlliance(state,p);
+      for(const t of others){
+        const reason=own?'你已經有合作對象':inviteBlock(state,p,t,declined);
+        list.push({...base,kind:'invite',label:`${invites?'改邀':'邀請'} ${t.name} 合作`,targetId:t.id,reason});
       }
-    } else list.push(base);
+    } else if(o.steal){
+      for(const t of others){
+        const chance=stealChance(p,t),amount=stealAmount(t),betray=allied(state,p,t);
+        list.push({...base,kind:'steal',label:`搶 ${t.name} 的案子${betray?'（背叛合作）':''}`,targetId:t.id,chance,amount,betray,reason:stealBlock(state,t),
+          outcomes:[{p:chance,text:`搶到：2 季內每季轉走 ${money(amount)}${betray?'；但這是背叛，合作立刻結束，對方 70% 告贏求償':''}`},{p:round2(1-chance),text:`沒搶到，投標費 ${money(S.fee)} 拿不回來${betray?'；背叛照樣成立':''}`}]});
+      }
+    } else list.push({...base,label:invites&&card.id==='C13'?'不找了，自己來':base.label});
   }
-  return list.map((o,index)=>({...o,index,affordable:p.cash>=o.stake}));
+  return list.map((o,index)=>({...o,index,reason:o.reason||'',affordable:!o.reason&&(o.stake<=0||p.cash>=o.stake)}));
 }
 export function resolveChoice(state,playerId,index){
   const p=current(state);
   if(state.status!=='playing'||state.phase!=='choice'||p.id!==playerId||!state.pendingChoice)throw Error('現在沒有需要決定的機會卡。');
   const card=cardById(state.pendingChoice.cardId),opt=chanceOptions(state,p,card)[index];
   if(!opt)throw Error('請選擇一個選項。');
+  if(opt.reason)throw Error(opt.reason);
   if(!opt.affordable)throw Error(`現金不足，需要 ${money(opt.stake)}。`);
+  const t=opt.targetId?playerById(state,opt.targetId):null;
+  if(opt.kind==='invite'){
+    const pc=state.pendingChoice;
+    state.pendingResponse={type:'alliance',fromId:p.id,targetId:t.id,cardId:card.id,declined:pc.declined??[],invites:(pc.invites??0)+1};
+    state.pendingChoice=null;state.phase='respond';state.lastResult=null;
+    say(state,`${p.name}邀請${t.name}合作，等待回覆。`);
+    return {pending:true};
+  }
+  if(opt.kind==='steal'){
+    p.cash=round2(p.cash-opt.stake);state.pendingChoice=null;
+    say(state,`${p.name}付了投標費，要搶${t.name}的案子${opt.betray?'（對方是合作夥伴）':''}。`);
+    if(t.cash<INTERACT.steal.counterFee){resolveSteal(state,p,t,{countered:false});return {done:true}}
+    state.pendingResponse={type:'counter',fromId:p.id,targetId:t.id,cardId:card.id,chance:opt.chance};
+    state.phase='respond';state.lastResult=null;
+    return {pending:true};
+  }
   p.cash=round2(p.cash-opt.stake);
   const o=pickOutcome(state,opt.outcomes),before=p.cash;
   applyEffects(state,p,o,opt.stake);
@@ -222,6 +274,100 @@ export function resolveChoice(state,playerId,index){
   checkGoal(state,p);
   return o;
 }
+// 等誰回覆：合作邀請由被邀請的人回答；搶案由被搶的人決定要不要反制。
+export const responder=state=>state.phase==='respond'&&state.pendingResponse?playerById(state,state.pendingResponse.targetId):null;
+export function respondOptions(state){
+  const r=state.pendingResponse;if(!r)return null;
+  const from=playerById(state,r.fromId),t=playerById(state,r.targetId),A=INTERACT.alliance,S=INTERACT.steal;
+  if(r.type==='alliance')return {type:r.type,from:from.name,to:t.name,
+    question:`${from.name}邀請你合作，要答應嗎？`,
+    yes:{label:'答應合作',detail:`${Math.round(A.accept*100)}% 合作順利：雙方收入 +${A.pct}%，持續 ${A.rounds} 季，期間災難損失互相分擔 ${Math.round(A.share*100)}%；${Math.round((1-A.accept)*100)}% 鬧翻：雙方收入 ${A.falloutPct}%，持續 ${A.falloutRounds} 季。`},
+    no:{label:'拒絕',detail:state.players.filter(x=>!x.bankrupt).length>2?`如果${from.name}之後邀到別人合作成功，你收入 ${A.declinePct}%，持續 ${A.declineRounds} 季。`:'兩人局拒絕沒有風險。'}};
+  const betray=allied(state,from,t),amount=stealAmount(t);
+  return {type:r.type,from:from.name,to:t.name,
+    question:`${from.name}要搶你的案子${betray?'（你們正在合作，這是背叛）':''}，要花 ${money(S.counterFee)} 反制嗎？`,
+    yes:{label:`反制（${money(S.counterFee)}）`,detail:`對方成功率從 ${Math.round(r.chance*100)}% 降到 ${Math.round(r.chance*50)}%；對方沒搶到的話，投標費 ${money(S.fee)} 歸你。`,affordable:t.cash>=S.counterFee},
+    no:{label:'不反制',detail:`對方有 ${Math.round(r.chance*100)}% 機會搶到，2 季內每季轉走你 ${money(amount)}。`}};
+}
+export function respond(state,playerId,yes){
+  const r=state.pendingResponse,t=responder(state);
+  if(state.status!=='playing'||!t||t.id!==playerId)throw Error('現在不需要你回覆。');
+  const p=playerById(state,r.fromId),A=INTERACT.alliance,S=INTERACT.steal;
+  state.pendingResponse=null;
+  if(r.type==='alliance'){
+    if(yes){
+      const ok=nextRandom(state)<A.accept;
+      if(ok){
+        const until=state.round+A.rounds-1;
+        for(const x of [p,t])x.effects.push({source:'C13',income:A.pct,until,partnerId:x===p?t.id:p.id});
+        const losers=r.declined.map(id=>playerById(state,id)).filter(x=>x&&!x.bankrupt);
+        for(const x of losers)x.effects.push({source:'C13-decline',income:A.declinePct,until:state.round+A.declineRounds-1});
+        const extra=losers.length?`；拒絕邀請的${losers.map(x=>x.name).join('、')}收入 ${A.declinePct}%，持續 ${A.declineRounds} 季`:'';
+        state.lastResult={text:`${t.name}答應了，合作順利：雙方收入 +${A.pct}%，到第 ${until} 季${extra}。`,cash:0,option:`邀請 ${t.name} 合作`};
+        say(state,`${p.name}與${t.name}合作，雙方收入 +${A.pct}%，到第 ${until} 季${extra}。`);
+      } else {
+        const until=state.round+A.falloutRounds-1;
+        for(const x of [p,t])x.effects.push({source:'C13-fallout',income:A.falloutPct,until});
+        state.lastResult={text:`${t.name}答應了，但合作鬧翻：雙方收入 ${A.falloutPct}%，到第 ${until} 季。`,cash:0,option:`邀請 ${t.name} 合作`};
+        say(state,`${p.name}和${t.name}合作鬧翻，雙方收入 ${A.falloutPct}%，到第 ${until} 季。`);
+      }
+      state.phase='manage';
+    } else {
+      const declined=[...r.declined,t.id];
+      say(state,`${t.name}拒絕了${p.name}的合作邀請。`);
+      const card=cardById(r.cardId),again=r.invites<A.maxInvites&&!activeAlliance(state,p);
+      state.pendingChoice={cardId:r.cardId,playerId:p.id,declined,invites:r.invites};
+      if(again&&chanceOptions(state,p,card).some(o=>o.kind==='invite'&&o.affordable)){state.phase='choice';state.lastResult={text:`${t.name}拒絕了，可以再邀另一位。`,cash:0,option:`邀請 ${t.name} 合作`}}
+      else {state.pendingChoice=null;state.phase='manage';state.lastResult={text:`${t.name}拒絕了，這次沒找到合作夥伴。`,cash:0,option:`邀請 ${t.name} 合作`}}
+    }
+    return state.lastResult;
+  }
+  // 搶案：被搶的人決定要不要反制
+  let countered=false;
+  if(yes){
+    if(t.cash<S.counterFee)throw Error(`現金不足，反制需要 ${money(S.counterFee)}。`);
+    t.cash=round2(t.cash-S.counterFee);countered=true;
+  }
+  resolveSteal(state,p,t,{countered,chance:r.chance});
+  return state.lastResult;
+}
+function resolveSteal(state,p,t,{countered,chance=stealChance(p,t)}){
+  const S=INTERACT.steal,L=INTERACT.lawsuit,round=state.round;
+  const ally=activeAlliance(state,p),betray=ally?.partnerId===t.id;
+  const finalChance=countered?chance/2:chance,ok=nextRandom(state)<finalChance;
+  const parts=[];let gained=0;
+  if(countered)parts.push(`${t.name}花 ${money(S.counterFee)} 反制，成功率降到 ${Math.round(finalChance*100)}%`);
+  let stolen=null;
+  if(ok){
+    const amount=stealAmount(t),until=round+S.rounds-1;
+    stolen={amount,until};
+    p.flatIncomes.push({amount,until,label:'搶下的案子',victimId:t.id});
+    t.flatIncomes.push({amount:-amount,until,label:'被搶走的案子',byId:p.id});
+    t.stealImmuneUntil=until+S.immunity;
+    parts.push(`搶到了！到第 ${until} 季每季轉走${t.name} ${money(amount)}`);
+  } else {
+    parts.push('沒搶到');
+    if(countered){t.cash=round2(t.cash+S.fee);parts.push(`投標費 ${money(S.fee)} 歸${t.name}`)}
+  }
+  if(betray){
+    // 背叛：合作立刻結束、兩人不能再合作，並自動打官司。
+    const left=Math.max(0,ally.until-round+1);
+    for(const x of [p,t])x.effects=x.effects.filter(e=>!(e.source==='C13'&&(e.partnerId===p.id||e.partnerId===t.id)));
+    p.feuds=[...new Set([...(p.feuds??[]),t.id])];t.feuds=[...new Set([...(t.feuds??[]),p.id])];
+    parts.push('背叛了合作，合作立刻結束');
+    if(nextRandom(state)<L.win){
+      const comp=round2(left*L.pct/100*baseSalary(t));
+      p.cash=round2(p.cash-comp);t.cash=round2(t.cash+comp);gained-=comp;
+      if(stolen){p.flatIncomes=p.flatIncomes.filter(x=>!(x.label==='搶下的案子'&&x.victimId===t.id&&x.until===stolen.until));t.flatIncomes=t.flatIncomes.filter(x=>!(x.label==='被搶走的案子'&&x.byId===p.id&&x.until===stolen.until))}
+      parts.push(`${t.name}告贏了，${p.name}賠償 ${money(comp)}${stolen?'，案子也還回去':''}`);
+    } else parts.push(`${t.name}的官司敗訴，沒有拿到賠償`);
+  }
+  const text=parts.join('；')+'。';
+  state.lastResult={text,cash:round2(gained-S.fee),option:`搶 ${t.name} 的案子`};
+  say(state,`${p.name}搶${t.name}的案子：${text}`);
+  state.pendingResponse=null;state.phase='manage';
+  checkGoal(state,p);checkGoal(state,t);
+}
 function applyEffects(state,p,o,stake){
   const r=state.round,v=x=>val(x,p.roleId);
   if(o.cash)p.cash=round2(p.cash+v(o.cash));
@@ -229,16 +375,6 @@ function applyEffects(state,p,o,stake){
   if(o.salary)p.salaryFactor=round2(p.salaryFactor*(1+v(o.salary)/100)*10000)/10000;
   if(o.delayedSalary)p.pendingSalary.push({at:r+o.delayedSalary.after,pct:v(o.delayedSalary.pct)});
   if(o.flatIncome)p.flatIncomes.push({amount:o.flatIncome.amount,until:r+o.flatIncome.rounds-1,label:o.flatIncome.label});
-  if(o.alliance){
-    const partner=playerById(state,o.targetId),until=r+o.alliance.rounds-1;
-    for(const x of [p,partner])x.effects.push({source:'C13',income:o.alliance.pct,until,partnerId:x===p?partner.id:p.id});
-    say(state,`${p.name}與${partner.name}合作，雙方收入 +${o.alliance.pct}%，到第 ${until} 季。`);
-  }
-  if(o.victim){
-    const target=playerById(state,o.victim.id),until=r+o.victim.rounds-1;
-    target.flatIncomes.push({amount:-o.victim.amount,until,label:'被搶走的案子',byId:p.id});
-    say(state,`${p.name}搶下${target.name}的案子，到第 ${until} 季每季轉走 ${money(o.victim.amount)}。`);
-  }
   if(o.fatigue)p.fatigue=clamp(p.fatigue+o.fatigue,0,100);
   if(o.unemployed)p.unemployedRounds+=o.unemployed;
   if(o.investment){const x=o.investment;p.investments.push({id:`inv-${r}-${p.investments.length}`,name:x.name,value:x.value||0,income:x.income||0,maturity:x.maturity?r+x.maturity:null,payout:x.payout??0,collapse:!!x.collapse})}
@@ -325,6 +461,14 @@ function advance(state){
 }
 
 /* ---------- 季結算 ---------- */
+// 有人破產：合作直接結束（另一方不用替他負責），他搶來或被搶的案子也一併結束。
+function endTiesWith(state,p){
+  for(const x of state.players){
+    x.effects=x.effects.filter(e=>!(e.source==='C13'&&e.partnerId===p.id));
+    x.flatIncomes=x.flatIncomes.filter(f=>f.victimId!==p.id&&f.byId!==p.id);
+  }
+  p.effects=p.effects.filter(e=>e.source!=='C13');
+}
 export function settleRound(state){
   const round=state.round,e=state.economy;
   for(const p of state.players.filter(x=>!x.bankrupt)){
@@ -332,10 +476,7 @@ export function settleRound(state){
     p.pendingSalary=p.pendingSalary.filter(x=>x.at>round);
     const q=computeQuarter(state,p,{random:nextRandom(state)});
     // 還款：先算利息，再攤還本金。
-    for(const d of p.debts){
-      const interest=round2(d.balance*debtRate(state,d)/400),pay=round2(Math.min(d.balance+interest,Math.max(d.payment,interest)));
-      d.balance=round2(d.balance-(pay-interest));
-    }
+    for(const d of p.debts){const {interest,pay}=debtDue(state,d);d.balance=round2(d.balance-(pay-interest))}
     p.debts=p.debts.filter(d=>d.balance>0.001);
     let extra=0;
     for(const x of p.investments.filter(x=>x.maturity&&x.maturity<=round)){extra+=x.payout;say(state,x.collapse?`${p.name}的${x.name}會頭倒會，會款全部拿不回來。`:`${p.name}的${x.name}到期，拿回 ${money(x.payout)}。`)}
@@ -355,7 +496,7 @@ export function settleRound(state){
     if(p.cash<0){
       const room=round2(creditLimit(p)-creditUsed(p)),need=round2(-p.cash);
       if(need<=room){addCredit(p,need);p.cash=0;say(state,`${p.name}現金不足，自動動用信用貸款 ${money(need)}。`)}
-      else {p.bankrupt=true;say(state,`${p.name}現金與信用額度都用盡，宣告破產。`)}
+      else {p.bankrupt=true;say(state,`${p.name}現金與信用額度都用盡，宣告破產。`);endTiesWith(state,p)}
     }
     p.effects=p.effects.filter(x=>x.until>round);p.flatIncomes=p.flatIncomes.filter(x=>x.until>round);
     p.history.push({round,income:q.earned,net:p.lastNet,cash:p.cash,debt:totalDebt(p)});
@@ -380,8 +521,12 @@ export function settleRound(state){
 /* ---------- 景氣與 AI 央行 ---------- */
 function shock(state,key){return state.marketActive.reduce((s,a)=>{const e=cardById(a.eventId),age=state.round-a.startedRound;return s+(age>=0&&age<e.duration?(e.macro?.[key]||0)*e.decay[age]:0)},0)}
 export function evaluateCentralBank(state,snap){
-  const facts={inflation:snap.inflation,growth:snap.growth,unemployment:snap.unemployment,stockDrop:snap.prevStock?100*(1-snap.stock/snap.prevStock):0};
-  const items=CENTRAL_BANK_RULES.map(r=>{const [k,op,v]=r.test.match(/(\w+)(>=|<=)(-?[\d.]+)/).slice(1);const x=facts[k];return {...r,value:round2(x),matched:op==='>='?x>=Number(v):x<=Number(v)}});
+  const facts={inflation:snap.inflation,growth:snap.growth,unemployment:snap.unemployment,rate:snap.rate,stockDrop:snap.prevStock?100*(1-snap.stock/snap.prevStock):0};
+  // 條件可以用 && 串接，例如 'rate>=2.5&&inflation<=2.5'；value 顯示第一個條件的數值。
+  const items=CENTRAL_BANK_RULES.map(r=>{
+    const conds=r.test.split('&&').map(c=>{const [k,op,v]=c.trim().match(/(\w+)(>=|<=)(-?[\d.]+)/).slice(1);const x=facts[k];return {x,ok:op==='>='?x>=Number(v):x<=Number(v)}});
+    return {...r,value:round2(conds[0].x),matched:conds.every(c=>c.ok)};
+  });
   const chosen=items.find(x=>x.matched)||null;
   const cooling=state.lastRateChangeRound!==null&&state.round-state.lastRateChangeRound<2;
   return {items,chosen,cooling};

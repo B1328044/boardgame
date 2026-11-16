@@ -2,8 +2,10 @@
 // 用法：node simulate.mjs [局數] [每局人數] [種子位移]　全部為高難度 Bot
 //      node simulate.mjs levels [局數] [每局人數]　混合低／中／高難度
 import {ROLES} from './data.js';
-import {createGame,rollDice,drawEvent,resolveChoice,endTurn,setOvertime,repayDebt,buyGoal,goalProgress} from './engine.js';
-import {makeBot,botChoice,botManageStep,BOT_LEVELS,LOW_STYLES} from './bot.js';
+import {createGame,rollDice,drawEvent,resolveChoice,respond,responder,endTurn,setOvertime,repayDebt,buyGoal,goalProgress,chanceOptions,cardById} from './engine.js';
+import {makeBot,botChoice,botRespond,botManageStep,BOT_LEVELS,LOW_STYLES} from './bot.js';
+// 互動卡統計：每個選項被選幾次、回應結果。
+export const usage={};const count=k=>usage[k]=(usage[k]||0)+1;
 
 let seed=1;
 const rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296};
@@ -13,7 +15,21 @@ function playTurn(s,rng){
   if(s.phase==='skip')return endTurn(s);
   rollDice(s);
   if(s.phase==='draw')drawEvent(s);
-  if(s.phase==='choice')resolveChoice(s,p.id,botChoice(s,p,rng));
+  let guard=0;
+  while(['choice','respond'].includes(s.phase)&&guard++<10){
+    if(s.phase==='choice'){
+      const card=cardById(s.pendingChoice.cardId),i=botChoice(s,p,rng),o=chanceOptions(s,p,card)[i];
+      if(card.interactive)count(`${card.id} ${o.kind==='invite'?'邀請':o.kind==='steal'?(o.betray?'搶（背叛）':'搶'):'不參與'}`);
+      resolveChoice(s,p.id,i);
+    } else {
+      const t=responder(s),r=s.pendingResponse,yes=botRespond(s,t,rng);
+      count(r.type==='alliance'?(yes?'C13 對方答應':'C13 對方拒絕'):(yes?'C14 對方反制':'C14 對方不反制'));
+      respond(s,t.id,yes);
+      const text=s.lastResult?.text||'';
+      if(r.type==='alliance'&&yes)count(text.includes('鬧翻')?'C13 鬧翻':'C13 合作成功');
+      if(r.type==='counter'){count(text.includes('搶到了')?'C14 搶到':'C14 沒搶到');if(text.includes('告贏'))count('背叛 官司告贏');if(text.includes('敗訴'))count('背叛 官司敗訴')}
+    }
+  }
   const memo={};let step;
   while(s.status==='playing'&&s.phase==='manage'&&(step=botManageStep(s,p,memo,rng))){
     if(step.type==='overtime')setOvertime(s,p.id,step.level);
@@ -45,6 +61,7 @@ export function runSim(games,size,{quiet=false,offset=0,maxRounds=24,fixedRoles=
     for(const r of ROLES){const st=stats[r.id],rate=100*st.wins/st.seats;
       console.log(`${r.name.padEnd(4,'　')} 勝率 ${rate.toFixed(1).padStart(5)}%（${(rate/fair).toFixed(2)} 倍） 達標平均季數 ${st.goalWins?(st.winRound/st.goalWins).toFixed(1):'—'}  平均進度 ${(100*st.progress/st.seats).toFixed(0)}%  破產率 ${(100*st.bankrupt/st.seats).toFixed(1)}%`)}
   }
+  if(!quiet&&Object.keys(usage).length){console.log('— 互動卡 —');console.log(Object.entries(usage).sort().map(([k,v])=>`${k} ${v}`).join('　'))}
   if(!quiet&&levels){console.log('— 依 Bot 難度 —');for(const [k,b] of Object.entries(byLevel).sort()){const name=k.startsWith('low-')?`低（${LOW_STYLES[k.slice(4)].label}）`:BOT_LEVELS[k].label;const rate=100*b.wins/b.seats;console.log(`${name.padEnd(7,'　')} 勝率 ${rate.toFixed(1).padStart(5)}%（${(rate/fair).toFixed(2)} 倍） 座位數 ${b.seats}`)}}
   return {stats,fair,rounds:rounds/games,reasons,byLevel};
 }

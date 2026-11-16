@@ -1,7 +1,7 @@
 import {ROLES,BOARD,TILE_TYPES,FORTUNE_CARDS,MARKET_EVENTS,CHANCE_CARDS,LOSS_CARDS,CENTRAL_BANK_RULES,INSURANCE,FATIGUE,OVERTIME,ECON_TILES} from './data.js';
-import {createGame,rollDice,drawEvent,resolveChoice,endTurn,setOvertime,repayDebt,borrow,buyGoal,canBuyGoal,housePlan,computeQuarter,totalDebt,debtRate,creditLimit,creditUsed,goalProgress,chanceOptions,cardById,roleById,movementPath,val,exportGame,importGame,economyRegime,tileType,tileFlipped} from './engine.js';
+import {createGame,rollDice,drawEvent,resolveChoice,endTurn,setOvertime,repayDebt,borrow,buyGoal,canBuyGoal,housePlan,computeQuarter,totalDebt,debtRate,creditLimit,creditUsed,goalProgress,chanceOptions,cardById,roleById,movementPath,val,exportGame,importGame,economyRegime,tileType,tileFlipped,respond,responder,respondOptions,quarterlyPayments} from './engine.js';
 import {syncInfo,isNewerGame} from './sync.js';
-import {BOT_LEVELS,LOW_STYLES,makeBot,botLabel,botChoice,botManageStep} from './bot.js';
+import {BOT_LEVELS,LOW_STYLES,makeBot,botLabel,botChoice,botRespond,botManageStep} from './bot.js';
 
 const $=s=>document.querySelector(s),h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>Number(n).toLocaleString('zh-TW',{maximumFractionDigits:Math.abs(n)<10?2:1});
@@ -61,6 +61,8 @@ function renderSetup(){
 
 /* ---------- 棋盤 ---------- */
 const currentPlayer=()=>state?.players[state.turnIndex];
+// 現在該誰動作：平常是輪到的玩家；被邀請合作或被搶案子時是要回覆的人。
+const actorPlayer=()=>state?.phase==='respond'?responder(state):currentPlayer();
 function boardCoords(i){if(i<=6)return [1,i+1];if(i<=12)return [i-5,7];if(i<=18)return [7,19-i];return [25-i,1]}
 function drawnCard(){
   if(state.phase!=='manage'||!state.lastDraw||state.lastDraw.type==='chance'&&!state.lastResult)return null;
@@ -86,7 +88,13 @@ function centerContent(){
   if(state.phase==='choice'){
     const card=cardById(state.pendingChoice.cardId),opts=chanceOptions(state,p,card);
     const note=state.lastDraw?.note?`<p class="revealed-desc">${h(state.lastDraw.note)}</p>`:'';
-    return cardScene('chance',`<p class="card-hint">機會 · ${card.id} · 請做出選擇</p><div class="revealed-card"><span class="revealed-symbol">?</span><h3>${h(card.name)}</h3>${note}<p class="revealed-desc">${h(card.desc)}</p></div>`,`<div class="choice-row">${opts.map(o=>`<button class="card-continue ${o.stake?'':'ghost'}" type="button" data-action="choose" data-value="${o.index}" ${o.affordable&&!p.bot?'':'disabled'} title="${h(o.outcomes.map(x=>`${Math.round(x.p*100)}%：${x.text}`).join('\n'))}">${h(o.label)}${o.affordable?'':'（現金不足）'}</button>`).join('')}</div>`);
+    const declinedNote=state.pendingChoice.declined?.length&&state.lastResult?.text?`<p class="result-line bad">${h(state.lastResult.text)}</p>`:'';
+    return cardScene('chance',`<p class="card-hint">機會 · ${card.id} · 請做出選擇</p><div class="revealed-card"><span class="revealed-symbol">?</span><h3>${h(card.name)}</h3>${note}${declinedNote}<p class="revealed-desc">${h(card.desc)}</p></div>`,`<div class="choice-row">${opts.map(o=>`<button class="card-continue ${o.stake?'':'ghost'}" type="button" data-action="choose" data-value="${o.index}" ${o.affordable&&!p.bot?'':'disabled'} title="${h(o.outcomes.map(x=>`${Math.round(x.p*100)}%：${x.text}`).join('\n'))}">${h(o.label)}${o.affordable?'':`（${h(o.reason||'現金不足')}）`}</button>`).join('')}</div>`);
+  }
+  if(state.phase==='respond'){
+    const r=respondOptions(state),t=responder(state),card=cardById(state.pendingResponse.cardId);
+    const btn=(yes,o)=>`<button class="card-continue ${yes?'':'ghost'}" type="button" data-action="respond" data-value="${yes?1:0}" ${t.bot||o.affordable===false?'disabled':''} title="${h(o.detail)}">${h(o.label)}${o.affordable===false?'（現金不足）':''}</button>`;
+    return cardScene('chance',`<p class="card-hint">機會 · ${card.id} · 請 ${h(t.name)} 回覆</p><div class="revealed-card"><span class="revealed-symbol">${r.type==='alliance'?'🤝':'💼'}</span><h3>${h(t.name)}，${h(r.question)}</h3><p class="revealed-desc"><b>${h(r.yes.label)}：</b>${h(r.yes.detail)}</p><p class="revealed-desc"><b>${h(r.no.label)}：</b>${h(r.no.detail)}</p></div>`,t.bot?`<p class="card-instruction">🤖 ${h(t.name)} 正在考慮…</p>`:`<div class="choice-row">${btn(true,r.yes)}${btn(false,r.no)}</div>`);
   }
   const shown=drawnCard();
   if(shown){
@@ -133,6 +141,7 @@ function renderTurn(){
     const why={goal:'達成目標',progress:'季數用完，目標進度最高',survivor:'其他玩家都破產',bankruptcy:'所有玩家都破產'}[state.winReason];
     el.innerHTML=`<h2 class="turn-name">對局結束</h2><p class="turn-role">${h(why)}</p><p class="turn-meta">勝出：<strong>${h(winners.map(w=>`${w.name}（${role(w.roleId).name}）`).join('、')||'無')}</strong></p><button class="secondary" data-action="new-game">再玩一局</button>`;return;
   }
+  if(state.phase==='respond'){const t=responder(state);el.innerHTML=`${head}${steps(2)}<p class="turn-meta">等 ${h(t.name)} ${state.pendingResponse.type==='alliance'?'決定要不要合作':'決定要不要反制'}。${t.bot?'（Bot 自動回覆）':`請 ${h(t.name)} 在棋盤中央回覆。`}</p>`;return}
   if(p.bot){el.innerHTML=`${head}<div class="bot-status"><span class="bot-dot"></span>🤖 ${h(botLabel(p.bot))}${botPaused?' · 已暫停':` · ${botPhaseText()}`}</div><p class="turn-meta">${h(p.bot.style?LOW_STYLES[p.bot.style].desc:BOT_LEVELS[p.bot.level].desc)}。</p><p class="turn-meta bot-last">${h(state.log[0]||'')}</p>${botControls()}`;return}
   if(animation){el.innerHTML=`${head}${steps(2)}<p class="turn-meta">${animation.stage==='rolling'?'兩個數字正在跳動…':animation.stage==='result'?'結果已停定，稍後開始移動。':`前進 ${animation.dice} 格。`}</p><button class="primary" disabled>請稍候…</button>`;return}
   if(state.phase==='skip'){el.innerHTML=`${head}${steps(2)}<p class="turn-meta">這回合無法行動，本季收支照常結算。</p><button class="primary" data-action="end-turn">${lastTurn()?'結算本季 →':'交給下一位 →'}</button>`;return}
@@ -141,13 +150,13 @@ function renderTurn(){
   const debtOptions=p.debts.map(d=>`<option value="${d.id}">${h(d.name)} · 餘 ${m(d.balance)} · 年息 ${debtRate(state,d)}%</option>`).join('');
   const room=Math.max(0,creditLimit(p)-creditUsed(p));
   el.innerHTML=`${head}${steps(3)}<p class="turn-meta">${state.dice?`前進 ${state.dice} 格。`:'停留原地。'}完成理財決定後交給下一位玩家。</p>
-  <div class="action-block"><h4>本季工作量 · 疲勞 ${p.fatigue}</h4><div class="fatigue-track"><i style="width:${p.fatigue}%" class="${p.fatigue>=FATIGUE.burnout?'burn':''}"></i></div><p>疲勞 ≥ ${FATIGUE.burnout} 時收入 −20%。不加班每季疲勞 −20，停在休息站再 −20。</p><div class="seg-row">${[[0,'正常上班','疲勞 −20'],[1,'加班','收入 +15% · 疲勞 +10'],[2,'爆肝','收入 +30% · 疲勞 +25']].map(([lv,label,sub])=>`<button type="button" data-action="overtime" data-value="${lv}" class="${p.overtime===lv?'on':''}" ${p.unemployedRounds?'disabled':''}><b>${label}</b><small>${sub}</small></button>`).join('')}</div></div>
-  ${p.debts.length?`<div class="action-block"><h4>提前還款 · 總負債 ${m(totalDebt(p))}</h4><p>每季應繳 ${m(p.debts.reduce((s,d)=>s+d.payment,0))}。先還高利率的負債最划算。</p><select id="repay-debt" class="action-select">${debtOptions}</select><div class="action-row"><input id="repay-amount" type="number" min="0.1" step="0.1" value="${Math.min(5,Math.floor(p.cash))}" aria-label="還款金額（萬）"><button type="button" data-action="repay">還款</button></div></div>`:''}
+  <div class="action-block"><h4>本季工作量 · 疲勞 ${p.fatigue}</h4><div class="fatigue-track"><i style="width:${p.fatigue}%" class="${p.fatigue>=FATIGUE.burnout?'burn':''}"></i></div><p>季結算時疲勞 ≥ ${FATIGUE.burnout}：收入 −20%，而且加班沒有額外收入。不加班每季疲勞 −20，停在休息站再 −20。</p><div class="seg-row">${[[0,'正常上班','疲勞 −20'],[1,'加班',p.fatigue>=FATIGUE.burnout?'過勞中沒有加成 · 疲勞 +10':'收入 +15% · 疲勞 +10'],[2,'爆肝',p.fatigue>=FATIGUE.burnout?'過勞中沒有加成 · 疲勞 +25':'收入 +30% · 疲勞 +25']].map(([lv,label,sub])=>`<button type="button" data-action="overtime" data-value="${lv}" class="${p.overtime===lv?'on':''}" ${p.unemployedRounds?'disabled':''}><b>${label}</b><small>${sub}</small></button>`).join('')}</div></div>
+  ${p.debts.length?`<div class="action-block"><h4>提前還款 · 總負債 ${m(totalDebt(p))}</h4><p>本季應繳 ${m(quarterlyPayments(state,p))}。先還高利率的負債最划算。</p><select id="repay-debt" class="action-select">${debtOptions}</select><div class="action-row"><input id="repay-amount" type="number" min="0.1" step="0.1" value="${Math.min(5,Math.floor(p.cash))}" aria-label="還款金額（萬）"><button type="button" data-action="repay">還款</button></div></div>`:''}
   <div class="action-block"><h4>信用貸款 · 年息 ${(state.economy.rate+8).toFixed(2)}%</h4><p>剩餘額度 ${m(room)}。現金不足時季結算會自動動用；額度用完就破產。</p><div class="action-row"><input id="borrow-amount" type="number" min="0.1" step="0.1" value="5" aria-label="借款金額（萬）"><button type="button" data-action="borrow" ${room>0?'':'disabled'}>借款</button></div></div>
   ${goalBlock(p)}
   <button class="secondary" style="margin-top:18px" data-action="end-turn">${lastTurn()?'結算本季 →':'交給下一位 →'}</button>`;
 }
-function botPhaseText(){if(animation)return '移動中';return {roll:'準備拉霸',draw:'準備抽卡',choice:'考慮中',manage:'理財中',skip:'暫停一回合'}[state.phase]||'思考中'}
+function botPhaseText(){if(animation)return '移動中';return {roll:'準備拉霸',draw:'準備抽卡',choice:'考慮中',respond:'等待回覆',manage:'理財中',skip:'暫停一回合'}[state.phase]||'思考中'}
 function botControls(){return `<div class="bot-controls"><button type="button" data-action="bot-pause" class="${botPaused?'on':''}">${botPaused?'▶ 繼續':'⏸ 暫停'} Bot</button><div class="bot-speed" role="group" aria-label="Bot 速度">${Object.entries(BOT_SPEEDS).map(([k,v])=>`<button type="button" data-action="bot-speed" data-value="${k}" class="${botSpeed===k?'on':''}">${v.label}</button>`).join('')}</div></div>`}
 function lastTurn(){for(let i=state.turnIndex+1;i<state.players.length;i++)if(!state.players[i].bankrupt)return false;return true}
 
@@ -156,7 +165,7 @@ function lastTurn(){for(let i=state.turnIndex+1;i<state.players.length;i++)if(!s
 function playerBadges(p){
   const r=state.round,ally=p.effects.find(x=>x.source==='C13'&&x.until>=r),allyName=ally?state.players.find(x=>x.id===ally.partnerId)?.name:'';
   const stolen=p.flatIncomes.filter(x=>x.until>=r&&x.label==='被搶走的案子'),won=p.flatIncomes.filter(x=>x.until>=r&&x.label==='搶下的案子');
-  return [p.bot?`<span class="badge bot">🤖 ${h(botLabel(p.bot))}</span>`:'',p.bankrupt?'<span class="badge warn">已破產</span>':'',p.insured?'<span class="badge good">🛡 有保險</span>':'',p.unemployedRounds?`<span class="badge warn">${p.roleId==='free'?'案源斷炊':'失業'} ${p.unemployedRounds} 季</span>`:'',p.skipNext?'<span class="badge warn">下回合暫停</span>':'',p.fatigue>=FATIGUE.burnout?'<span class="badge warn">過勞</span>':'',p.overtime?`<span class="badge">${OVERTIME[p.overtime].label}中</span>`:'',p.salaryFactor!==1?`<span class="badge ${p.salaryFactor>1?'good':''}">薪資 ×${p.salaryFactor.toFixed(2)}</span>`:'',p.roleId==='free'?`<span class="badge">連續 ${p.streak} 季達標</span>`:'',ally?`<span class="badge good">🤝 與${h(allyName)}合作至第 ${ally.until} 季</span>`:'',won.length?`<span class="badge good">💼 搶下案子 +${m(won.reduce((s,x)=>s+x.amount,0))}/季</span>`:'',stolen.length?`<span class="badge warn">💼 案子被搶 ${m(stolen.reduce((s,x)=>s+x.amount,0))}/季</span>`:''].filter(Boolean).join('');
+  return [p.bot?`<span class="badge bot">🤖 ${h(botLabel(p.bot))}</span>`:'',p.bankrupt?'<span class="badge warn">已破產</span>':'',p.insured?'<span class="badge good">🛡 有保險</span>':'',p.unemployedRounds?`<span class="badge warn">${p.roleId==='free'?'案源斷炊':'失業'} ${p.unemployedRounds} 季</span>`:'',p.skipNext?'<span class="badge warn">下回合暫停</span>':'',p.fatigue>=FATIGUE.burnout?'<span class="badge warn">過勞</span>':'',p.overtime?`<span class="badge">${OVERTIME[p.overtime].label}中</span>`:'',p.salaryFactor!==1?`<span class="badge ${p.salaryFactor>1?'good':''}">薪資 ×${p.salaryFactor.toFixed(2)}</span>`:'',p.roleId==='free'?`<span class="badge">連續 ${p.streak} 季達標</span>`:'',ally?`<span class="badge good">🤝 與${h(allyName)}合作至第 ${ally.until} 季</span>`:'',won.length?`<span class="badge good">💼 搶下案子 +${m(won.reduce((s,x)=>s+x.amount,0))}/季</span>`:'',stolen.length?`<span class="badge warn">💼 案子被搶 ${m(stolen.reduce((s,x)=>s+x.amount,0))}/季</span>`:'',...p.effects.filter(x=>x.until>=state.round&&['C13-fallout','C13-decline'].includes(x.source)).map(x=>`<span class="badge warn">${x.source==='C13-fallout'?'合作鬧翻':'拒絕合作'} 收入 ${x.income}% 至第 ${x.until} 季</span>`)].filter(Boolean).join('');
 }
 function playerCard(p,extra=''){
   const r=role(p.roleId),prog=goalProgress(state,p),idx=state.players.indexOf(p);
@@ -208,7 +217,7 @@ function chart(data,key,title,color,unit=''){
 function renderEconomy(){
   const e=state.economy,last=state.decisions.at(-1);
   const rules=CENTRAL_BANK_RULES.map(r=>{const ev=last?.items.find(x=>x.id===r.id);const chosen=last?.ruleId===r.id;return `<article class="rule-card"><div class="rule-top"><h3>${r.id} · ${h(r.name)}</h3><span class="status-pill ${chosen?'selected':ev?.matched?'matched':''}">${chosen?'已採用':ev?.matched?'符合':'未符合'}</span></div><p>${h(r.text)}</p>${ev?`<p>上季數值：${ev.value}%</p>`:''}</article>`}).join('');
-  $('#economy-body').innerHTML=`<div class="fed-hero"><div><span>政策利率</span><strong>${pct(e.rate,2)}</strong></div><div><span>成長率／通膨</span><strong>${pct(e.growth)}／${pct(e.inflation)}</strong></div><div><span>失業率</span><strong>${pct(e.unemployment)}</strong></div><div><span>物價指數</span><strong>${(e.priceLevel*100).toFixed(1)}</strong></div></div><p class="muted">上季決策：${last?h(last.action):'尚未結算'}。規則依 R1 → R6 的順序採用第一條符合的；利率調整後冷卻 2 季。浮動房貸利率＝政策利率＋0.6%，信用貸款＝政策利率＋8%，存款利息＝政策利率−0.4%。</p><div class="rule-list">${rules}</div><div class="history-layout gap-top"><div>${chart(state.economyHistory,'growth','成長率','#0e9186','%')}${chart(state.economyHistory,'inflation','通膨','#c55d5d','%')}</div><div>${chart(state.economyHistory,'rate','政策利率','#5979b0','%')}${chart(state.economyHistory,'unemployment','失業率','#ce9460','%')}</div></div>`;
+  $('#economy-body').innerHTML=`<div class="fed-hero"><div><span>政策利率</span><strong>${pct(e.rate,2)}</strong></div><div><span>成長率／通膨</span><strong>${pct(e.growth)}／${pct(e.inflation)}</strong></div><div><span>失業率</span><strong>${pct(e.unemployment)}</strong></div><div><span>物價指數</span><strong>${(e.priceLevel*100).toFixed(1)}</strong></div></div><p class="muted">上季決策：${last?h(last.action):'尚未結算'}。規則依 R1 → R7 的順序採用第一條符合的；利率調整後冷卻 2 季。浮動房貸利率＝政策利率＋0.6%，信用貸款＝政策利率＋8%，存款利息＝政策利率−0.4%。</p><div class="rule-list">${rules}</div><div class="history-layout gap-top"><div>${chart(state.economyHistory,'growth','成長率','#0e9186','%')}${chart(state.economyHistory,'inflation','通膨','#c55d5d','%')}</div><div>${chart(state.economyHistory,'rate','政策利率','#5979b0','%')}${chart(state.economyHistory,'unemployment','失業率','#ce9460','%')}</div></div>`;
 }
 function renderHistory(){
   const rows=state.players.map(p=>`<tr><td>${h(p.name)}（${role(p.roleId).name}）</td>${p.history.slice(-8).map(x=>`<td>${m(x.cash)}</td>`).join('')}</tr>`).join('');
@@ -232,14 +241,15 @@ function render(){
 function scheduleBot(){
   clearTimeout(botTimer);botTimer=null;
   if(!state||state.status!=='playing'||page!=='game'||botPaused||animation||document.hidden)return;
-  const p=currentPlayer();if(!p?.bot)return;
-  const reading=drawnCard()||state.phase==='choice';
+  const p=actorPlayer();if(!p?.bot)return;
+  const reading=drawnCard()||state.phase==='choice'||state.phase==='respond';
   botTimer=setTimeout(botTick,BOT_SPEEDS[botSpeed].ms*(reading?1.8:1));
 }
 async function botTick(){
   botTimer=null;
   if(!state||animation||botPaused||state.status!=='playing')return;
-  const p=currentPlayer();if(!p?.bot)return;
+  const p=actorPlayer();if(!p?.bot)return;
+  if(state.phase==='respond'){await run(()=>{const t=responder(state);if(t?.bot)respond(state,t.id,botRespond(state,t,Math.random))});return}
   if(state.phase==='roll'){await rollWithAnimation();if(!animation)render();return}
   const shown=state.phase==='manage'&&drawnCard();
   if(shown){dismissedCardKey=shown.key;render();return}
@@ -309,6 +319,7 @@ $('#game').addEventListener('click',e=>{
   if(action==='new-game'){void resetGame();return}
   if(action==='bot-pause'){botPaused=!botPaused;render();return}
   if(action==='bot-speed'){botSpeed=a.dataset.value;try{localStorage.setItem('life-board-bot',JSON.stringify({speed:botSpeed}))}catch{}render();return}
+  if(action==='respond'){const t=responder(state);if(t&&!t.bot)void run(()=>respond(state,t.id,a.dataset.value==='1'));return}
   if(p?.bot)return;
   if(action==='roll'){void rollWithAnimation();return}
   if(animation)return;

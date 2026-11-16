@@ -1,8 +1,8 @@
 // 連線版房間邏輯（不含網路）：座位、開局、動作驗證、Bot 自動操作，以及「每個人只看得到自己的資料」的視角過濾。
 // 伺服器是唯一執行遊戲引擎的地方；手機與大螢幕只送出動作、接收過濾後的畫面資料。
 import {ROLES,BOARD,ECON_TILES,FATIGUE,OVERTIME} from '../personal/data.js';
-import {createGame,rollDice,drawEvent,resolveChoice,endTurn,setOvertime,repayDebt,borrow,buyGoal,canBuyGoal,housePlan,computeQuarter,totalDebt,debtRate,creditLimit,creditUsed,goalProgress,chanceOptions,cardById,roleById,economyRegime,tileType,tileFlipped} from '../personal/engine.js';
-import {makeBot,botChoice,botManageStep,botLabel,BOT_LEVELS} from '../personal/bot.js';
+import {createGame,rollDice,drawEvent,resolveChoice,endTurn,setOvertime,repayDebt,borrow,buyGoal,canBuyGoal,housePlan,computeQuarter,totalDebt,debtRate,creditLimit,creditUsed,goalProgress,chanceOptions,cardById,roleById,economyRegime,tileType,tileFlipped,respond,responder,respondOptions} from '../personal/engine.js';
+import {makeBot,botChoice,botRespond,botManageStep,botLabel,BOT_LEVELS} from '../personal/bot.js';
 
 const CODE_CHARS='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const MAX_SEATS=8;
@@ -69,12 +69,21 @@ export class Room{
   }
   backToLobby(){this.game=null;this.seats.forEach(s=>{s.playerId=null})}
   currentPlayer(){return this.game?.players[this.game.turnIndex]}
-  // 玩家送出的動作：只有輪到的那位玩家可以操作，其餘一律拒絕。
+  // 現在該誰動作：平常是輪到的玩家；有人被邀請合作或被搶案子時，是要回覆的那個人。
+  actor(){const g=this.game;return g?.phase==='respond'?responder(g):this.currentPlayer()}
+  seatOf(p){return this.seats.find(s=>s.playerId===p?.id)}
+  // 玩家送出的動作：只有該動作的那位玩家可以操作，其餘一律拒絕。
   act(token,action){
     const g=this.game,seat=this.seatByToken(token);
     if(!seat)throw Error('找不到你的座位，請重新加入。');
     if(!g||g.status!=='playing')throw Error('遊戲尚未開始或已經結束。');
+    if(action?.type==='respond'){
+      const r=responder(g);
+      if(!r||r.id!==seat.playerId)throw Error('現在不需要你回覆。');
+      return respond(g,r.id,!!action.yes);
+    }
     const p=this.currentPlayer();
+    if(g.phase==='respond')throw Error(`正在等 ${responder(g).name} 回覆。`);
     if(p.id!==seat.playerId)throw Error(`還沒輪到你，現在是 ${p.name} 的回合。`);
     const n=x=>{const v=Number(x);if(!Number.isFinite(v))throw Error('請輸入數字。');return v};
     switch(action?.type){
@@ -89,11 +98,18 @@ export class Room{
       default:throw Error('未知的動作。');
     }
   }
-  needsBot(){const p=this.currentPlayer();return !!(this.game?.status==='playing'&&p?.bot)}
-  // Bot 一次走一步，讓大螢幕看得到過程。回傳 false 代表現在不是 Bot 的回合。
+  // 需要大螢幕自動處理：該動作的是 Bot；或要回覆的真人已經離線（自動拒絕／不反制，避免整局卡住）。
+  needsBot(){
+    const g=this.game;if(g?.status!=='playing')return false;
+    const a=this.actor();if(!a)return false;
+    if(a.bot)return true;
+    return g.phase==='respond'&&this.seatOf(a)?.connected===false;
+  }
+  // Bot 一次走一步，讓大螢幕看得到過程。回傳 false 代表現在不需要自動處理。
   botStep(rng=Math.random){
     if(!this.needsBot())return false;
     const g=this.game,q=this.currentPlayer();
+    if(g.phase==='respond'){const a=this.actor();respond(g,a.id,a.bot?botRespond(g,a,rng):false);return true}
     if(g.phase==='roll'){rollDice(g);return true}
     if(g.phase==='skip'){endTurn(g);return true}
     if(g.phase==='draw'){drawEvent(g);return true}
@@ -131,6 +147,7 @@ export class Room{
         // 機會卡的選項與機率只給輪到的玩家；大螢幕只看到「正在考慮」與結果。
         result:g.lastResult?{text:g.lastResult.text,option:g.lastResult.option||''}:null,
         decision:last?{action:last.action,ruleId:last.ruleId}:null,
+        respond:g.phase==='respond'&&g.pendingResponse?{type:g.pendingResponse.type,fromId:g.pendingResponse.fromId,targetId:g.pendingResponse.targetId,to:responder(g).name}:null,
         log:publicLog.slice(0,LOG_KEEP),logCount:publicLog.length}};
   }
   // 只給本人的資料：現金、負債、收支預估、輪到自己時可以做的操作。
@@ -141,6 +158,7 @@ export class Room{
     const p=g.players.find(x=>x.id===seat.playerId);if(!p)return base;
     const r=roleById(p.roleId),isMyTurn=g.status==='playing'&&this.currentPlayer()?.id===p.id,q=computeQuarter(g,p);
     const card=g.phase==='choice'&&isMyTurn?cardById(g.pendingChoice.cardId):null;
+    const mustRespond=g.status==='playing'&&responder(g)?.id===p.id;
     const buy=canBuyGoal(g,p),hp=p.roleId==='exec'?housePlan(g,p):null;
     const now=g.round,ally=p.effects.find(x=>x.source==='C13'&&x.until>=now);
     return {...base,playerId:p.id,isMyTurn,phase:isMyTurn?g.phase:null,
@@ -150,6 +168,7 @@ export class Room{
         salaryFactor:p.salaryFactor,streak:p.streak,bestStreak:p.bestStreak,lastIncome:p.lastIncome,lastNet:p.lastNet,lastBreakdown:p.lastBreakdown,
         investments:p.investments.map(x=>({name:x.name,income:x.income,maturity:x.maturity})),
         alliance:ally?{until:ally.until,partner:g.players.find(x=>x.id===ally.partnerId)?.name||''}:null,
+        penalties:p.effects.filter(x=>x.until>=now&&['C13-fallout','C13-decline'].includes(x.source)).map(x=>({text:x.source==='C13-fallout'?'合作鬧翻':'拒絕合作',income:x.income,until:x.until})),
         caseIn:round1(p.flatIncomes.filter(x=>x.until>=now&&x.label==='搶下的案子').reduce((s,x)=>s+x.amount,0)),
         caseOut:round1(p.flatIncomes.filter(x=>x.until>=now&&x.label==='被搶走的案子').reduce((s,x)=>s+x.amount,0)),
         preview:{earned:q.earned,living:q.living,debt:q.debt,net:q.net},
@@ -157,6 +176,7 @@ export class Room{
         buy:{ok:buy.ok,type:r.goal.type,price:p.roleId==='office'?g.economy.carPrice:hp?.price??null,down:hp?.down??null,dsr:hp?.dsr??null,dsrLimit:r.goal.dsr??null},
         overtimeLevels:Object.entries(OVERTIME).map(([lv,o])=>({level:Number(lv),label:o.label,income:o.income,fatigue:FATIGUE[`overtime${lv}`]})),
         fatigueRules:{normal:FATIGUE.none,rest:FATIGUE.restStop,burnout:FATIGUE.burnout,penalty:FATIGUE.burnoutIncome}},
-      choice:card?{id:card.id,name:card.name,desc:card.desc||'',options:chanceOptions(g,p,card).map(o=>({index:o.index,label:o.label,stake:o.stake,affordable:o.affordable,odds:o.outcomes.map(x=>({p:x.p,text:x.text}))}))}:null};
+      choice:card?{id:card.id,name:card.name,desc:card.desc||'',notice:g.pendingChoice.declined?.length?g.lastResult?.text||'':'',options:chanceOptions(g,p,card).map(o=>({index:o.index,label:o.label,stake:o.stake,affordable:o.affordable,reason:o.reason||'',odds:o.outcomes.map(x=>({p:x.p,text:x.text}))}))}:null,
+      respond:mustRespond?respondOptions(g):null};
   }
 }

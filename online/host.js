@@ -192,9 +192,9 @@ function hostSounds(prev,next,logBefore){
 }
 // 輪到真人玩家太久沒動作：大螢幕滴答催促（理財階段給 60 秒，其他 30 秒；再過 15 秒變急促）。
 setInterval(()=>{
-  const g=pub?.game,cur=g?.players.find(p=>p.id===g.currentId),note=$('#wait-note');
+  const g=pub?.game,cur=g?.players.find(p=>p.id===(g.respond?g.respond.targetId:g.currentId)),note=$('#wait-note');
   if(!g||pub.status!=='playing'||!cur){turnKey=null;return}
-  const key=`${g.round}-${g.currentId}-${g.phase}`;
+  const key=`${g.round}-${cur.id}-${g.phase}`;
   if(key!==turnKey){turnKey=key;turnSince=Date.now()}
   if(cur.isBot||!cur.connected){if(note)note.textContent='';return}
   const waited=Math.floor((Date.now()-turnSince)/1000),limit=g.phase==='manage'?60:30;
@@ -236,7 +236,7 @@ function gameScreen(){
   }).join('');
   const rolling=rollFx&&Date.now()-rollFx<REEL_MS;if(rolling)setTimeout(render,REEL_MS+50);
   const reels=g.reels||[0,0];
-  const center=finished?winnerCard(g):g.card&&['choice','manage'].includes(g.phase)?cardCard(g,cur):`<div class="center-icon">⌁</div><h3>${h(cur?.name||'')}</h3><p>${h(PHASE_TEXT[g.phase]||'')}</p><div class="slot-machine ${rolling?'is-rolling':''}">${reels.map(v=>`<span class="slot-reel"><span class="slot-strip"><strong class="slot-cell">${rolling?'?':v}</strong></span></span>`).join('')}</div><div class="slot-total">${g.dice===null?'等待拉霸':g.dice===0?'原地停留':`前進 ${g.dice} 格`}</div>`;
+  const center=finished?winnerCard(g):g.card&&['choice','manage','respond'].includes(g.phase)?cardCard(g,cur):`<div class="center-icon">⌁</div><h3>${h(cur?.name||'')}</h3><p>${h(PHASE_TEXT[g.phase]||'')}</p><div class="slot-machine ${rolling?'is-rolling':''}">${reels.map(v=>`<span class="slot-reel"><span class="slot-strip"><strong class="slot-cell">${rolling?'?':v}</strong></span></span>`).join('')}</div><div class="slot-total">${g.dice===null?'等待拉霸':g.dice===0?'原地停留':`前進 ${g.dice} 格`}</div>`;
   // 新動態提到的玩家，在右側進度列短暫亮起。
   const f=freshStyle(),newText=f.on?g.log.slice(0,fresh.count).join(' '):'';
   const players=g.players.map(p=>{const ping=newText&&newText.includes(p.name);return `<div class="pub-player ${p.id===g.currentId?'current':''} ${p.bankrupt?'bankrupt':''} ${ping?'ping':''}" style="--player-color:${COLORS[p.color]};${ping?f.style:''}"><span class="pawn big" style="--c:${COLORS[p.color]}"><span>${p.icon}</span></span><span class="chip-text"><b>${h(p.name)}${g.winnerIds.includes(p.id)?' 🏆':''}</b><small>${h(p.roleName)} · 第 ${p.position} 格${p.bankrupt?' · 已破產':p.isBot?` · 🤖 ${h(p.botLabel)}`:p.connected?'':' · 📵 離線'}</small><i class="chip-track"><i style="width:${p.progress}%"></i></i></span><span class="pub-prog">${p.progress}%</span></div>`}).join('');
@@ -245,9 +245,9 @@ function gameScreen(){
     ${ticker(g)}
     <div class="host-cols">
       <aside class="host-left">
-        <div class="turn-panel panel"><p class="eyebrow">對局狀態 · 第 ${g.round}／${g.maxRounds} 季</p>${finished?`<h2 class="turn-name">對局結束</h2>`:`<h2 class="turn-name" style="color:${COLORS[cur.color]}">${cur.icon} ${h(cur.name)}</h2><p class="turn-role">${h(cur.roleName)} · ${h(PHASE_TEXT[g.phase]||'')}</p><p class="turn-meta">${cur.isBot?'🤖 Bot 自動操作中':'請在自己的手機上操作'}</p><p id="wait-note" class="wait-note"></p>`}</div>
+        <div class="turn-panel panel"><p class="eyebrow">對局狀態 · 第 ${g.round}／${g.maxRounds} 季</p>${finished?`<h2 class="turn-name">對局結束</h2>`:`<h2 class="turn-name" style="color:${COLORS[cur.color]}">${cur.icon} ${h(cur.name)}</h2><p class="turn-role">${h(cur.roleName)} · ${h(PHASE_TEXT[g.phase]||'')}</p><p class="turn-meta">${g.respond?`📱 ${h(respondWait(g.respond))}`:cur.isBot?'🤖 Bot 自動操作中':'請在自己的手機上操作'}</p><p id="wait-note" class="wait-note"></p>`}</div>
         <div class="panel mini-panel ${econPing?'ping':''}" style="${econPing?f.style:''}"><div class="panel-title"><h3>本季景氣</h3><span class="pill">AI 央行</span></div>${g.regime!=='normal'?`<div class="econ-banner ${g.regime}"><b>${g.regime==='recession'?'📉 景氣衰退':'📈 景氣過熱'}</b><span>${h(g.regimeText)}</span></div>`:''}<div class="mini-economy">${[['成長率',pct(e.growth)],['通膨',pct(e.inflation)],['失業率',pct(e.unemployment)],['政策利率',pct(e.rate,2)],['車價',m(e.carPrice)],['房價',m(e.housePrice)]].map(([a,b])=>`<div class="mini-stat"><span>${a}</span><strong>${b}</strong></div>`).join('')}</div>${g.decision?`<p class="muted small">上季央行：${h(g.decision.action)}</p>`:''}</div>
-        <div class="panel rules-mini"><h3>規則速記</h3><ul><li><b>正常上班</b> 疲勞 ${FATIGUE.none}；<b>加班</b> 收入 +${OVERTIME[1].income}%、疲勞 +${FATIGUE.overtime1}；<b>爆肝</b> 收入 +${OVERTIME[2].income}%、疲勞 +${FATIGUE.overtime2}</li><li>疲勞 ≥ ${FATIGUE.burnout}：結算那季收入 ${FATIGUE.burnoutIncome}%</li><li>☕ 停在休息站：疲勞 ${FATIGUE.restStop}</li></ul></div>
+        <div class="panel rules-mini"><h3>規則速記</h3><ul><li><b>正常上班</b> 疲勞 ${FATIGUE.none}；<b>加班</b> 收入 +${OVERTIME[1].income}%、疲勞 +${FATIGUE.overtime1}；<b>爆肝</b> 收入 +${OVERTIME[2].income}%、疲勞 +${FATIGUE.overtime2}</li><li>疲勞 ≥ ${FATIGUE.burnout}：結算那季收入 ${FATIGUE.burnoutIncome}%，加班沒有加成</li><li>☕ 停在休息站：疲勞 ${FATIGUE.restStop}</li></ul></div>
       </aside>
       <section class="host-board panel"><div class="panel-title"><div><p class="eyebrow">BOARD / 棋盤</p><h2>人生版圖</h2></div><div class="legend"><span><i class="dot fortune"></i>好運</span><span><i class="dot market"></i>市場</span><span><i class="dot chance"></i>機會</span><span><i class="dot loss"></i>災難</span></div></div><div class="board" id="board">${tiles}<div class="board-center">${center}</div></div></section>
       <aside class="host-right">
@@ -258,7 +258,7 @@ function gameScreen(){
 function cardCard(g,cur){
   const c=g.card,thinking=g.phase==='choice',key=`${g.round}-${g.turnIndex}-${c.id}`,fresh=key!==shownCardKey;shownCardKey=key;
   // 只有新卡第一次出現時才播翻牌動畫，避免每次更新都重播。
-  return `<div class="card-scene ${fresh?'card-reveal':''} scope-${c.type}"><p class="card-hint">${TYPE_LABEL[c.type]} · ${c.id}${c.note?` · ${h(c.note)}`:''}</p><div class="revealed-card"><span class="revealed-symbol">${TYPE_ICON[c.type]}</span><h3>${h(c.name)}</h3><p class="revealed-desc">${h(c.desc)}</p>${thinking?`<p class="result-line">${h(cur.name)} 正在考慮…</p>`:g.result?.text?`${g.result.option?`<p class="revealed-desc">選擇「${h(g.result.option)}」</p>`:''}<p class="result-line">${h(g.result.text)}</p>`:''}</div></div>`;
+  return `<div class="card-scene ${fresh?'card-reveal':''} scope-${c.type}"><p class="card-hint">${TYPE_LABEL[c.type]} · ${c.id}${c.note?` · ${h(c.note)}`:''}</p><div class="revealed-card"><span class="revealed-symbol">${TYPE_ICON[c.type]}</span><h3>${h(c.name)}</h3><p class="revealed-desc">${h(c.desc)}</p>${g.phase==='respond'?`<p class="result-line">${h(respondWait(g.respond))}</p>`:thinking?`<p class="result-line">${h(cur.name)} 正在考慮…</p>`:g.result?.text?`${g.result.option?`<p class="revealed-desc">選擇「${h(g.result.option)}」</p>`:''}<p class="result-line">${h(g.result.text)}</p>`:''}</div></div>`;
 }
 function winnerCard(g){
   const winners=g.players.filter(p=>g.winnerIds.includes(p.id));

@@ -15,7 +15,7 @@ function phoneFx(pp,pv){
   const g=pub?.game,pg=pp?.game,me=priv?.me,pm=pv?.me,name=priv?.name||'';
   const ck=g?.card?`${g.round}-${g.turnIndex}-${g.card.id}`:null;
   // 輪到自己（包含開局第一位）：提示音＋整個畫面閃一下（不震動）
-  if(pp&&priv?.isMyTurn&&!pv?.isMyTurn){Sound.play('myTurn');document.body.classList.remove('turn-flash');void document.body.offsetWidth;document.body.classList.add('turn-flash')}
+  if(pp&&(priv?.isMyTurn&&!pv?.isMyTurn||priv?.respond&&!pv?.respond)){Sound.play('myTurn');document.body.classList.remove('turn-flash');void document.body.offsetWidth;document.body.classList.add('turn-flash')}
   if(!g||!pg||!me||!pm||pv.playerId!==priv.playerId){fxLogLen=g?g.logCount:null;fxCardKey=ck;return}
   // 自己抽到的卡：翻牌＋卡片類型音效
   const myCard=ck&&ck!==fxCardKey&&g.currentId===priv.playerId;
@@ -143,9 +143,10 @@ function finishedCard(g){
 }
 function turnCard(g){
   const cur=g.players.find(p=>p.id===g.currentId);
+  if(priv.respond)return respondCard(priv.respond);
   if(!priv.isMyTurn){
-    const card=g.card&&['choice','manage'].includes(g.phase)?`<p class="muted">${h(TYPE_LABEL[g.card.type])}卡：${h(g.card.name)}${g.result?.text&&g.phase==='manage'?` → ${h(g.result.text)}`:''}</p>`:'';
-    return `<section class="phone-card waiting"><p class="eyebrow">等待中</p><h2>輪到 ${h(cur.name)}</h2><p>${h(PHASE_TEXT[g.phase]||'')}${cur.isBot?'（Bot）':''}</p>${card}</section>`;
+    const card=g.card&&['choice','manage','respond'].includes(g.phase)?`<p class="muted">${h(TYPE_LABEL[g.card.type])}卡：${h(g.card.name)}${g.result?.text&&g.phase==='manage'?` → ${h(g.result.text)}`:''}</p>`:'';
+    return `<section class="phone-card waiting"><p class="eyebrow">等待中</p><h2>輪到 ${h(cur.name)}</h2><p>${g.respond?h(respondWait(g.respond)):h(PHASE_TEXT[g.phase]||'')}${cur.isBot?'（Bot）':''}</p>${card}</section>`;
   }
   const dis=busy?'disabled':'';
   const ph=priv.phase;
@@ -154,14 +155,15 @@ function turnCard(g){
   if(ph==='draw')return `<section class="phone-card turn"><p class="eyebrow">停在${h(TYPE_LABEL[pub.game.tiles[cur.position].type])}格</p><h2>抽一張卡</h2><button class="primary big draw-btn" data-a="draw" ${dis}>${TYPE_ICON[pub.game.tiles[cur.position].type]} 點我抽卡</button></section>`;
   if(ph==='choice'){
     const c=priv.choice;
-    return `<section class="phone-card turn"><p class="eyebrow">機會 · ${c.id}</p><h2>${h(c.name)}</h2><p>${h(c.desc)}</p><div class="choice-list">${c.options.map(o=>`<button class="choice-btn" data-a="choose" data-i="${o.index}" ${o.affordable&&!busy?'':'disabled'}><b>${h(o.label)}${o.affordable?'':'（現金不足）'}</b><small>${o.odds.map(x=>`${Math.round(x.p*100)}%：${h(x.text)}`).join('<br>')}</small></button>`).join('')}</div></section>`;
+    return `<section class="phone-card turn"><p class="eyebrow">機會 · ${c.id}</p><h2>${h(c.name)}</h2>${c.notice?`<p class="result-line">${h(c.notice)}</p>`:''}<p>${h(c.desc)}</p><div class="choice-list">${c.options.map(o=>`<button class="choice-btn" data-a="choose" data-i="${o.index}" ${o.affordable&&!busy?'':'disabled'}><b>${h(o.label)}${o.affordable?'':`（${h(o.reason||'現金不足')}）`}</b><small>${o.odds.map(x=>`${Math.round(x.p*100)}%：${h(x.text)}`).join('<br>')}</small></button>`).join('')}</div></section>`;
   }
+  if(ph==='respond')return `<section class="phone-card waiting"><p class="eyebrow">等待中</p><h2>${h(respondWait(g.respond))}</h2></section>`;
   // 理財階段
   const me=priv.me,last=g.card&&g.result?.text?`<p class="result-line">${h(g.card.name)}：${h(g.result.text)}</p>`:'';
   const debtOpts=me.debts.map(d=>`<option value="${d.id}">${h(d.name)} · 餘 ${m(d.balance)} · 年息 ${d.rate}%</option>`).join('');
   const goal=me.buy.type==='car'?`<button class="goal-btn" data-a="buy" ${me.buy.ok&&!busy?'':'disabled'}>一次付清買車（${m(me.buy.price)}）${me.buy.ok?' 🏁':''}</button>`:me.buy.type==='house'?`<p class="muted">頭期款 ${m(me.buy.down)}；月付佔收入 ${pct(me.buy.dsr,0)}（上限 ${me.buy.dsrLimit}%）</p><button class="goal-btn" data-a="buy" ${me.buy.ok&&!busy?'':'disabled'}>付頭期款買房 ${me.buy.ok?' 🏁':''}</button>`:'';
   return `<section class="phone-card turn"><p class="eyebrow">輪到你了 · 理財時間</p>${last}
-    <div class="action-block"><h4>本季工作量</h4>${fatigueMeter(me,true)}<div class="seg-row fatigue-pick">${workOptions(me).map(o=>`<button data-a="overtime" data-v="${o.level}" class="${me.overtime===o.level?'on':''}" ${me.unemployedRounds||busy?'disabled':''}><b>${h(o.label)}</b><small>${o.income?`收入 +${o.income}%`:'收入不變'}</small><small>疲勞 ${o.fatigue>0?'+':'−'}${Math.abs(o.fatigue)}</small><small class="${o.after>=me.fatigueRules.burnout?'over':''}">季末 → ${o.after}${o.after>=me.fatigueRules.burnout?' ⚠':''}</small></button>`).join('')}</div>${me.unemployedRounds?'<p class="muted small">失業期間不能加班。</p>':''}</div>
+    <div class="action-block"><h4>本季工作量</h4>${fatigueMeter(me,true)}<div class="seg-row fatigue-pick">${workOptions(me).map(o=>`<button data-a="overtime" data-v="${o.level}" class="${me.overtime===o.level?'on':''}" ${me.unemployedRounds||busy?'disabled':''}><b>${h(o.label)}</b><small>${!o.income?'收入不變':me.fatigue>=me.fatigueRules.burnout?'過勞中無加成':`收入 +${o.income}%`}</small><small>疲勞 ${o.fatigue>0?'+':'−'}${Math.abs(o.fatigue)}</small><small class="${o.after>=me.fatigueRules.burnout?'over':''}">季末 → ${o.after}${o.after>=me.fatigueRules.burnout?' ⚠':''}</small></button>`).join('')}</div>${me.unemployedRounds?'<p class="muted small">失業期間不能加班。</p>':''}</div>
     ${me.debts.length?`<div class="action-block"><h4>提前還款</h4><select id="repay-debt" class="action-select">${debtOpts}</select><div class="action-row"><input id="repay-amount" type="number" inputmode="decimal" min="0.1" step="0.1" value="${Math.max(0,Math.min(5,Math.floor(me.cash)))}"><button data-a="repay" ${dis}>還款</button></div></div>`:''}
     <div class="action-block"><h4>信用貸款 · 年息 ${pct(me.creditRate,2)}</h4><p class="muted">剩餘額度 ${m(me.creditRoom)}</p><div class="action-row"><input id="borrow-amount" type="number" inputmode="decimal" min="0.1" step="0.1" value="5"><button data-a="borrow" ${me.creditRoom>0&&!busy?'':'disabled'}>借款</button></div></div>
     ${goal}
@@ -174,11 +176,16 @@ function workOptions(me){
 }
 function fatigueMeter(me,full){
   const r=me.fatigueRules,burn=me.fatigue>=r.burnout;
-  return `<div class="fatigue-meter ${burn?'burn':''}"><div class="fatigue-head"><span>疲勞值</span><b>${me.fatigue}<small> / 100</small></b></div><div class="fatigue-bar"><i style="width:${me.fatigue}%"></i><em style="left:${r.burnout}%" title="過勞門檻"></em></div><div class="fatigue-scale"><span>0</span><span style="left:${r.burnout}%">${r.burnout} 過勞</span><span>100</span></div>${full||burn?`<p class="fatigue-rule">${burn?`⚠ 目前過勞：本季收入 ${r.penalty}%。`:''}季結算時疲勞 ≥ ${r.burnout}，那一季收入 ${r.penalty}%，降回 ${r.burnout} 以下就恢復。加班的疲勞季末才加上（⚠＝下一季會過勞）。停在 ☕ 休息站疲勞 ${r.rest}。</p>`:''}</div>`;
+  return `<div class="fatigue-meter ${burn?'burn':''}"><div class="fatigue-head"><span>疲勞值</span><b>${me.fatigue}<small> / 100</small></b></div><div class="fatigue-bar"><i style="width:${me.fatigue}%"></i><em style="left:${r.burnout}%" title="過勞門檻"></em></div><div class="fatigue-scale"><span>0</span><span style="left:${r.burnout}%">${r.burnout} 過勞</span><span>100</span></div>${full||burn?`<p class="fatigue-rule">${burn?`⚠ 目前過勞：本季收入 ${r.penalty}%，加班沒有加成。`:''}季結算時疲勞 ≥ ${r.burnout}，那一季收入 ${r.penalty}%，而且加班沒有額外收入；降回 ${r.burnout} 以下就恢復。加班的疲勞季末才加上（⚠＝下一季會過勞）。停在 ☕ 休息站疲勞 ${r.rest}。</p>`:''}</div>`;
+}
+// 被邀請合作或被搶案子：由自己決定
+function respondCard(r){
+  const dis=busy?'disabled':'';
+  return `<section class="phone-card turn"><p class="eyebrow">${r.type==='alliance'?'🤝 合作邀請':'💼 有人要搶你的案子'}</p><h2>${h(r.question)}</h2><div class="choice-list"><button class="choice-btn" data-a="respond" data-v="1" ${r.yes.affordable===false||busy?'disabled':''}><b>${h(r.yes.label)}${r.yes.affordable===false?'（現金不足）':''}</b><small>${h(r.yes.detail)}</small></button><button class="choice-btn" data-a="respond" data-v="0" ${dis}><b>${h(r.no.label)}</b><small>${h(r.no.detail)}</small></button></div></section>`;
 }
 function meCard(){
   const me=priv.me;if(!me)return '';
-  const badges=[me.insured?'<span class="badge good">🛡 有保險</span>':'',me.unemployedRounds?`<span class="badge warn">失業 ${me.unemployedRounds} 季</span>`:'',me.fatigue>=me.burnout?'<span class="badge warn">過勞</span>':'',me.salaryFactor!==1?`<span class="badge good">薪資 ×${me.salaryFactor.toFixed(2)}</span>`:'',me.goalType==='streak'?`<span class="badge">連續 ${me.streak} 季達標</span>`:'',me.alliance?`<span class="badge good">🤝 與${h(me.alliance.partner)}合作至第 ${me.alliance.until} 季</span>`:'',me.caseIn?`<span class="badge good">💼 搶下案子 +${m(me.caseIn)}/季</span>`:'',me.caseOut?`<span class="badge warn">💼 案子被搶 ${m(me.caseOut)}/季</span>`:''].filter(Boolean).join('');
+  const badges=[me.insured?'<span class="badge good">🛡 有保險</span>':'',me.unemployedRounds?`<span class="badge warn">失業 ${me.unemployedRounds} 季</span>`:'',me.fatigue>=me.burnout?'<span class="badge warn">過勞</span>':'',me.salaryFactor!==1?`<span class="badge good">薪資 ×${me.salaryFactor.toFixed(2)}</span>`:'',me.goalType==='streak'?`<span class="badge">連續 ${me.streak} 季達標</span>`:'',me.alliance?`<span class="badge good">🤝 與${h(me.alliance.partner)}合作至第 ${me.alliance.until} 季</span>`:'',me.caseIn?`<span class="badge good">💼 搶下案子 +${m(me.caseIn)}/季</span>`:'',me.caseOut?`<span class="badge warn">💼 案子被搶 ${m(me.caseOut)}/季</span>`:'',...(me.penalties||[]).map(x=>`<span class="badge warn">${h(x.text)} 收入 ${x.income}% 至第 ${x.until} 季</span>`)].filter(Boolean).join('');
   return `<section class="phone-card me"><div class="me-head"><span class="role-icon">${me.icon}</span><div><h3>${h(priv.name)}</h3><small>${h(me.roleName)} · 只有你看得到</small></div></div>
     <div class="wealth-line"><span>現金</span><strong>${m(me.cash)}</strong></div>
     <div class="goal-line"><div class="goal-line-head"><span>${h(me.goal)}</span><b>${me.progress}%</b></div><div class="goal-track"><i style="width:${me.progress}%"></i></div></div>
@@ -207,6 +214,7 @@ document.addEventListener('click',async e=>{
   if(a==='end')return act({type:'end'});
   if(a==='buy')return act({type:'buy'});
   if(a==='choose')return act({type:'choose',index:Number(b.dataset.i)});
+  if(a==='respond')return act({type:'respond',yes:b.dataset.v==='1'});
   if(a==='overtime')return act({type:'overtime',level:Number(b.dataset.v)});
   if(a==='repay')return act({type:'repay',debtId:$('#repay-debt').value,amount:Number($('#repay-amount').value)});
   if(a==='borrow')return act({type:'borrow',amount:Number($('#borrow-amount').value)});

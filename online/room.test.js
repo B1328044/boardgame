@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Room,newCode} from './room.mjs';
+import {drawEvent as drawCard} from '../personal/engine.js';
 
 const playUntilDone=(room,humans,limit=20000)=>{
   for(let i=0;i<limit&&room.game.status==='playing';i++){
     if(room.botStep())continue;
-    const p=room.currentPlayer(),seat=humans.find(s=>s.playerId===p.id),g=room.game;
+    const p=room.actor(),seat=humans.find(s=>s.playerId===p.id),g=room.game;
+    if(g.phase==='respond'){room.act(seat.token,{type:'respond',yes:Math.random()<.5});continue}
     if(g.phase==='roll')room.act(seat.token,{type:'roll'});
     else if(g.phase==='draw')room.act(seat.token,{type:'draw'});
     else if(g.phase==='choice'){const opts=room.privateView(seat.token).choice.options;room.act(seat.token,{type:'choose',index:opts.find(o=>o.affordable).index})}
@@ -77,4 +79,18 @@ test('公開動態帶有總則數：畫面只收最近 60 則，但 logCount 一
   assert.ok(v.log.length<=60);assert.ok(v.logCount>=v.log.length);
   assert.equal(v.logCount,r.game.log.filter(x=>!/提前償還|申請信用貸款|自動動用信用貸款/.test(x)).length);
   assert.ok(v.log.every(x=>!/申請信用貸款|自動動用信用貸款/.test(x)));
+});
+
+test('合作邀請與搶案反制：由被指定的人在自己的手機回覆；離線的人自動拒絕，不會卡住',()=>{
+  const r=new Room('ABCD');const a=r.addHuman({name:'甲',roleId:'office'}),b=r.addHuman({name:'乙',roleId:'low'});r.start();
+  const g=r.game;g.players[0].position=1;g.dice=1;g.phase='draw';drawCard(g,'C13');
+  r.act(a.token,{type:'choose',index:0});
+  assert.equal(g.phase,'respond');assert.equal(r.actor().id,b.playerId);
+  assert.equal(r.publicView().game.respond.to,'乙');
+  assert.match(r.privateView(b.token).respond.question,/甲邀請你合作/);assert.equal(r.privateView(a.token).respond,null);
+  assert.throws(()=>r.act(a.token,{type:'end'}),/正在等 乙 回覆/);
+  assert.throws(()=>r.act(a.token,{type:'respond',yes:true}),/不需要你回覆/);
+  assert.equal(r.needsBot(),false);
+  b.connected=false;assert.equal(r.needsBot(),true);
+  r.botStep();assert.equal(g.phase,'manage');assert.match(g.log[0],/拒絕/);
 });

@@ -30,7 +30,9 @@ test('低難度個性：賭徒押最大、保守派不冒險且會投保',()=>{
 });
 test('高難度：選期望值為正的選項，且保留生活費緩衝',()=>{
   const s=game([['exec',{level:'high'}],['low',null]]);const p=chance(s,'C02');
-  assert.equal(botChoice(s,p,seq([.9])),0,'併購消息期望值為正，現金充足就買');
+  assert.equal(botChoice(s,p,seq([.9])),1,'併購謠言期望值為負，不買');
+  const u=game([['office',{level:'high'}],['low',null]]);const w=chance(u,'C04');w.cash=60;
+  assert.equal(botChoice(u,w,seq([.9])),0,'進修長期加薪，期望值為正');
   const t=game([['office',{level:'high'}],['low',null]]);const q=chance(t,'C06');
   assert.equal(botChoice(t,q,seq([.9])),1,'直銷期望值為負，拒絕');
 });
