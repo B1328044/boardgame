@@ -4,7 +4,7 @@
 
 | 模式 | 資料夾 | 內容 |
 |---|---|---|
-| 個人版 · 人生棋局 | `personal/` | 底層、上班族、公司高管、自由業，各有收入、負債與勝利目標 |
+| 個人版 · 人生棋局 | `personal/` | 兩種玩法：A 工作卡版（基本工作起步、抽工作卡換工作，淨資產 300 萬獲勝）、B 角色版（底層、上班族、公司高管、自由業，各有目標）；共用天命卡、家鄉、車子、高速公路與出國 |
 | 企業版 · 經濟棋局 | `enterprise/` | 十種企業，經營、借貸、事件與 AI 聯準會 |
 
 ## 開啟方式
@@ -16,6 +16,8 @@
 首頁可選擇模式；兩種模式的「設定玩家」畫面上方都有「個人版／企業版」切換。兩種模式各自載入自己的 `data.js`、`engine.js`，對局分開儲存，切換不會清除另一邊的進度。
 
 ## 連線版（個人版）
+
+建立房間時選 **A 工作卡版**或 **B 角色版**。開局每位玩家在自己的手機上抽天命卡（大螢幕會揭曉）；應徵工作、應考、出國、買車（全額或車貸）、切換高速公路都在手機上操作。天命卡、工作／角色、學貸與車貸是明牌，大螢幕的玩家列表看得到；現金與其他負債只在自己的手機上。
 
 一台電腦當大螢幕（建議接投影），每位玩家用自己的手機掃 QR 加入。**不需要下載、不需要安裝 Node.js、不需要租主機**：整個資料夾放到 GitHub Pages 就能用。
 
@@ -75,7 +77,7 @@
 - 修改某個模式的原始檔後，在根目錄執行 `npm run build`（或 `node personal/build.mjs`、`node enterprise/build.mjs`）重新產生該模式的 `game.js`。
 - `npm test`：同時執行兩種模式與連線版的測試。
 - `npm run build`：重新產生兩種模式的 `game.js` 與連線版的 `online/core.js`。
-- `node personal/simulate.mjs 2000 4`、`node personal/simulate.mjs levels 1500 4`：個人版平衡模擬。
+- `node personal/simulate.mjs 2000 4 0 --variant=jobs`（或 `roles`，加 `--levels` 混合難度、`--json=檔名` 輸出資料）：個人版平衡模擬；`python tools/build_sim_report.py 報表.xlsx A=a.json B=b.json` 把輸出整理成全公式的試算表。
 - `node enterprise/simulate.mjs 2000 4`：企業版平衡模擬。
 - 各模式的規則細節見 `personal/README.md`、`enterprise/README.md`。
 

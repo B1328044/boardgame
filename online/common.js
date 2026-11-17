@@ -7,11 +7,13 @@ const m=n=>`${fmt(n)} 萬`;
 const signed=n=>`${n>=0?'+':'−'}${fmt(Math.abs(n))} 萬`;
 const pct=(n,d=1)=>`${Number(n).toFixed(d)}%`;
 const COLORS=['#0f9688','#5979b0','#ce9460','#aa6b91','#c55d5d','#7e9541','#348da5','#7a60ad'];
-const TYPE_LABEL={fortune:'好運',market:'市場',chance:'機會',loss:'災難',start:'休息站'};
-const TYPE_ICON={fortune:'✦',market:'◎',chance:'?',loss:'⚠',start:'☕'};
-const PHASE_TEXT={roll:'準備拉霸',draw:'準備抽卡',choice:'正在考慮機會卡',respond:'等待對方回覆',manage:'理財中',skip:'暫停一回合',finished:'對局結束'};
+const TYPE_LABEL={fortune:'好運',market:'市場',chance:'機會',loss:'災難',start:'休息站',home:'家鄉',airport:'機場',ramp:'交流道',toll:'收費站',arrival:'入境',abroad:'國外',return:'回國',job:'工作'};
+const TYPE_ICON={fortune:'✦',market:'◎',chance:'?',loss:'⚠',start:'☕',home:'⌂',airport:'✈',ramp:'⇢',toll:'¤',arrival:'⇣',abroad:'◍',return:'⇡',job:'💼'};
+const PHASE_TEXT={destiny:'抽天命卡',exam:'準備應考',roll:'準備拉霸',draw:'準備抽卡',choice:'正在考慮機會卡',respond:'等待對方回覆',manage:'理財中',skip:'暫停一回合',finished:'對局結束'};
 const respondWait=r=>r?`等 ${r.to} ${r.type==='alliance'?'決定要不要合作':'決定要不要反制'}…`:'';
 const WIN_TEXT={goal:'達成目標',progress:'季數用完，目標進度最高',survivor:'其他玩家都破產',bankruptcy:'所有玩家都破產'};
+// 玩家所在位置的文字：主地圖第幾格、高速公路或國外。
+const whereText=p=>p.track==='highway'?`高速公路 H${p.position+1}`:p.track==='abroad'?`國外 A${p.position+1}`:`第 ${p.position} 格`;
 function boardCoords(i){if(i<=6)return [1,i+1];if(i<=12)return [i-5,7];if(i<=18)return [7,19-i];return [25-i,1]}
 /* 動態分類：大螢幕與手機用來決定提示顏色、音效與震動 */
 function splitLog(x){const r=/^第 (\d+) 季｜(.*)$/.exec(x);return r?{round:Number(r[1]),text:r[2]}:{round:null,text:x}}
@@ -45,7 +47,7 @@ function setConn(kind,text){const el=$('#conn');if(el){el.className=`conn ${kind
    配對伺服器只負責牽線，遊戲資料不經過它。預設使用 PeerJS 的公用配對伺服器；
    測試或自架時可在網址加 ?signal=主機:埠號 改用自己的配對伺服器。 */
 const NET={
-  roomIdPrefix:'life-board-online-v1-',   // 改了訊息格式就把版本號往上加，新舊版本不會進到同一間
+  roomIdPrefix:'life-board-online-v2-',   // 改了訊息格式就把版本號往上加，新舊版本不會進到同一間
   beatMs:4000,                            // 手機每 4 秒回報一次「我還在」
   offlineMs:15000,                        // 房主 15 秒沒收到就標成離線
   retryMs:3000

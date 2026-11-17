@@ -252,3 +252,26 @@ body.turn-flash::after{content:'';position:fixed;inset:0;pointer-events:none;z-i
 /* 建立房間畫面：「改開另一版房間」按鈕與主按鈕同高、文字置中 */
 .mode-pick a.secondary{width:auto;min-width:200px;padding:0 22px;font-size:15px;background:#eff3f1;color:#33625e;border:1px solid #dae8e3}
 .mode-pick a.secondary:hover,.mode-pick a.secondary:focus-visible{border-color:var(--teal);color:var(--teal-dark)}
+
+/* ---------- 個人版 A／B 兩種玩法 ---------- */
+.variant-notes{display:grid;gap:6px;margin:14px 0 4px;max-width:640px}
+.variant-notes p{margin:0;font-size:14px;color:#52625e}
+.pub-tags{display:flex;flex-wrap:wrap;gap:4px;margin:3px 0 2px}
+.pub-tag{font-size:10.5px;line-height:1.5;padding:0 6px;border-radius:999px;background:#eef3f1;color:#3f5450;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.pub-tag.debt{background:#fbefe9;color:#9a4f31}
+.host-board .side-tracks{margin-top:10px}
+.host-board .side-track-tiles .tile{height:52px}
+.host-board .side-track-tiles .tile .pawn{width:20px;height:20px}
+.held-cards.phone{display:grid;gap:6px;margin:8px 0}
+.held-cards.phone .held-card{border:1px solid #e1e8e5;border-radius:10px;background:#fbfcfb;padding:6px 10px}
+.held-cards.phone summary{display:flex;gap:8px;align-items:center;cursor:pointer;list-style:none}
+.held-cards.phone summary::-webkit-details-marker{display:none}
+.held-cards.phone summary>span:first-child{font-size:20px}
+.held-cards.phone summary small{display:block;font-size:10.5px;color:#7a8a86}
+.held-cards.phone summary b{font-size:14px}
+.held-cards.phone p{margin:6px 0 2px;font-size:13px;color:#52625e}
+.toggle-row{display:flex;gap:8px;align-items:center;font-size:13px;margin:8px 0;color:#3f5450}
+/* 側邊軌道放在棋盤下方：棋盤高度扣掉軌道，讓整個版面一個螢幕看得完。 */
+.host-board:has(.side-tracks) .board{width:min(100%,calc((100vh - 370px)*1.21))}
+.host-board .side-track-tiles .tile-icon{display:none}
+.host-board .side-track-tiles .tile-type{font-size:10px}
