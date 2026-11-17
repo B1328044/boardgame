@@ -242,3 +242,18 @@ h1,h2,h3,p{margin-top:0}h1,h2,h3{letter-spacing:-.025em}h1{font-size:clamp(38px,
 .draw-deck:disabled,.card-continue:disabled{cursor:default;opacity:.6}
 @media(max-width:760px){.setup-player{grid-template-columns:22px minmax(0,1fr) minmax(0,1fr);row-gap:6px}.setup-player [data-setup-control]{grid-column:2/3}.setup-player .remove-player{grid-column:3/4;justify-self:end}}
 @media(prefers-reduced-motion:reduce){.bot-dot{animation:none}}
+
+/* ===== 連結做成的按鈕（上方選單「☰ 選單」、模式切換）：和一般按鈕一樣，不顯示底線 ===== */
+a.quiet,a.secondary,a.primary,.top-actions a{text-decoration:none}
+a.quiet{display:inline-flex;align-items:center}
+a.quiet:hover,a.quiet:focus-visible{background:#e5f1ed;color:var(--teal-dark)}
+a.secondary,a.primary{display:inline-flex;align-items:center;justify-content:center;text-align:center}
+@media(max-width:760px){.top-actions a.quiet{font-size:10px;padding:7px}}
+
+/* 模式切換：個人版、企業版兩格等寬並排，比較大、對稱 */
+.mode-switch{display:grid;grid-template-columns:auto repeat(2,minmax(0,1fr));gap:10px;align-items:stretch}
+.mode-switch>span{align-self:center}
+.mode-switch a{align-items:center;justify-content:center;text-align:center;padding:14px 12px;font-size:15px;gap:3px}
+.mode-switch a small{font-size:11px}
+.mode-switch a.on small{color:#d7f1ea}
+@media(max-width:520px){.mode-switch{grid-template-columns:repeat(2,minmax(0,1fr))}.mode-switch>span{grid-column:1/-1}}

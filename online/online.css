@@ -249,3 +249,6 @@ body.turn-flash::after{content:'';position:fixed;inset:0;pointer-events:none;z-i
 .ent .phone-card .action-row input{flex:1;min-width:0;height:42px;border-radius:8px;border:1px solid #4b6670;background:#203b48;color:#fff;padding:0 10px;font-size:16px}
 .ent .phone-card .action-row button{flex:none;height:42px;padding:0 14px;border-radius:8px;border:1px solid #4b6670;background:#2c4a57;color:#e3f6ef;font-weight:800}
 .ent .phone-card.me .finance-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+/* 建立房間畫面：「改開另一版房間」按鈕與主按鈕同高、文字置中 */
+.mode-pick a.secondary{width:auto;min-width:200px;padding:0 22px;font-size:15px;background:#eff3f1;color:#33625e;border:1px solid #dae8e3}
+.mode-pick a.secondary:hover,.mode-pick a.secondary:focus-visible{border-color:var(--teal);color:var(--teal-dark)}
