@@ -162,7 +162,8 @@ const Sound=(()=>{
 .snd-row input[type=range]{width:100%;accent-color:#0e9186}
 .snd-row input[type=range]:disabled{opacity:.35}
 .snd-pop small{font-size:11px;color:#7d8c8b;line-height:1.5}
-.snd-ctrl.phone .snd-toggle{background:#203b48;border-color:#35515b;color:#fff}`;
+.snd-ctrl.phone .snd-toggle{background:#203b48;border-color:#35515b;color:#fff}
+@media(max-width:600px){.snd-pop{position:fixed;left:16px;right:16px;width:auto}}`;
   function mountControls(el,{music=true}={}){
     if(!el)return;
     if(!document.getElementById('snd-style')){const st=document.createElement('style');st.id='snd-style';st.textContent=CSS;document.head.appendChild(st)}
@@ -173,18 +174,36 @@ const Sound=(()=>{
       <small>兩邊分開調整；設定會套用到這個網站的所有頁面。</small></div>`;
     const btn=el.querySelector('.snd-toggle'),pop=el.querySelector('.snd-pop');
     const sync=()=>{
-      const on=pref.sfx||(music&&pref.music);
-      btn.textContent=`${on?'🔊':'🔇'} 聲音`;btn.title=`音效${pref.sfx?'開':'關'}${music?`・背景音樂${pref.music?'開':'關'}`:''}`;
+      const on=pref.sfx||(music&&pref.music),label=`${on?'🔊':'🔇'} 聲音`;
+      if(btn.textContent!==label)btn.textContent=label;   // 只在真的改變時才換字，避免按下途中按鈕內容被重畫
+      btn.title=`音效${pref.sfx?'開':'關'}${music?`・背景音樂${pref.music?'開':'關'}`:''}`;
       el.querySelectorAll('[data-k]').forEach(i=>{i.checked=!!pref[i.dataset.k]});
       el.querySelectorAll('[data-v]').forEach(i=>{if(document.activeElement!==i)i.value=pref[i.dataset.v];i.disabled=!pref[i.dataset.v==='sfxVolume'?'sfx':'music']});
     };
-    btn.addEventListener('click',e=>{e.stopPropagation();unlock();pop.hidden=!pop.hidden;btn.setAttribute('aria-expanded',String(!pop.hidden))});
+    // 按下（pointerdown）就打開，不用等放開，避免點擊被其他事件吃掉時面板沒出現；已經打開時再按一次才關。
+    // 桌機滑鼠移上去也會打開，移開一小段時間後自動收起。
+    let openedByPress=false,leaveTimer=null,openedAt=0;
+    const setOpen=open=>{
+      if(open&&pop.hidden)openedAt=Date.now();
+      // 窄螢幕：面板固定在按鈕正下方、左右撐滿，不會超出畫面或蓋住按鈕。
+      if(open)pop.style.top=matchMedia('(max-width:600px)').matches?`${Math.round(btn.getBoundingClientRect().bottom+8)}px`:'';
+      pop.hidden=!open;btn.setAttribute('aria-expanded',String(open));if(open)sync();
+    };
+    btn.addEventListener('pointerdown',e=>{e.stopPropagation();if(pop.hidden){openedByPress=true;setOpen(true)}else openedByPress=Date.now()-openedAt<600;unlock()});
+    // 剛打開不到 0.6 秒（例如滑鼠移上去就打開了）再按，不要立刻又關掉。
+    btn.addEventListener('click',e=>{e.stopPropagation();if(openedByPress){openedByPress=false;return}if(!pop.hidden&&Date.now()-openedAt<600)return;setOpen(pop.hidden)});
+    btn.addEventListener('keydown',e=>{if(e.key==='Escape')setOpen(false)});
+    if(matchMedia('(hover:hover) and (pointer:fine)').matches){
+      el.addEventListener('mouseenter',()=>{clearTimeout(leaveTimer);setOpen(true)});
+      el.addEventListener('mouseleave',()=>{clearTimeout(leaveTimer);leaveTimer=setTimeout(()=>{if(!pop.contains(document.activeElement))setOpen(false)},500)});
+    }
     pop.addEventListener('click',e=>e.stopPropagation());
+    pop.addEventListener('pointerdown',e=>e.stopPropagation());
     // 先讀取使用者剛切換的值再解鎖聲音：解鎖會觸發重畫，順序反過來會把剛按的開關又改回去。
     el.querySelectorAll('[data-k]').forEach(i=>i.addEventListener('change',()=>{const v=i.checked;setPref(i.dataset.k,v);unlock();if(i.dataset.k==='sfx'&&v)play('click')}));
     el.querySelectorAll('[data-v]').forEach(i=>i.addEventListener('input',()=>{const v=Number(i.value);setPref(i.dataset.v,v);unlock()}));
     el.querySelectorAll('[data-v="sfxVolume"]').forEach(i=>i.addEventListener('change',()=>play('click')));
-    document.addEventListener('click',()=>{if(!pop.hidden){pop.hidden=true;btn.setAttribute('aria-expanded','false')}});
+    document.addEventListener('pointerdown',e=>{if(!pop.hidden&&!el.contains(e.target))setOpen(false)});
     listeners.add(sync);sync();
   }
   // 第一次點畫面就解鎖聲音（瀏覽器規定），需要的頁面同時開始播背景音樂。
