@@ -226,3 +226,26 @@ body.turn-flash::after{content:'';position:fixed;inset:0;pointer-events:none;z-i
 .phone-card.turn .primary.big:not(:disabled){animation:btn-breathe 1.8s ease-in-out infinite}
 @keyframes btn-breathe{50%{box-shadow:0 0 0 5px #73e0b655,0 0 22px #73e0b6aa}}
 @media(prefers-reduced-motion:reduce){.sound-unlock,body.turn-flash::after,.phone-card.turn .primary.big{animation:none}}
+
+/* ---------- 企業版大螢幕 ---------- */
+.ent .host-board .tile{position:relative}
+.ent .ghost-mark{position:absolute;right:5px;bottom:3px;font-size:24px;filter:drop-shadow(0 3px 6px #7a4aa066);animation:ghost-float 2.4s ease-in-out infinite;z-index:1}
+.ent .host-board .tile-icon{top:auto;bottom:5px;right:6px;font-size:13px;opacity:.55}
+.ent .host-board .ghost-tile .tile-icon{display:none}
+@keyframes ghost-float{50%{transform:translateY(-4px)}}
+.ent-events h3{margin:0 0 8px;font-size:14px}
+.ent-events ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.ent-events li{display:grid;grid-template-columns:10px 1fr;column-gap:8px;font-size:12px;align-items:baseline}
+.ent-events li small{grid-column:2;color:#7d8c8b}
+.ent .strike-scene{display:grid;gap:8px;justify-items:center;text-align:center}
+@media(prefers-reduced-motion:reduce){.ent .ghost-mark{animation:none}}
+/* ---------- 企業版手機 ---------- */
+.ent .goal-line{padding:12px 0 2px}
+.ent .goal-line-head{display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#6e7f80}
+.ent .goal-line-head b{color:var(--teal-dark,#08756e)}
+.ent .result-line{font-weight:800;color:#1d7a5f!important;font-size:12px!important}
+.ent .staff-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.ent .phone-card .action-row{display:flex;gap:6px;margin-top:8px}
+.ent .phone-card .action-row input{flex:1;min-width:0;height:42px;border-radius:8px;border:1px solid #4b6670;background:#203b48;color:#fff;padding:0 10px;font-size:16px}
+.ent .phone-card .action-row button{flex:none;height:42px;padding:0 14px;border-radius:8px;border:1px solid #4b6670;background:#2c4a57;color:#e3f6ef;font-weight:800}
+.ent .phone-card.me .finance-grid{grid-template-columns:repeat(3,minmax(0,1fr))}

@@ -11,7 +11,7 @@
   <div class="app-shell">
     <header class="topbar">
       <div class="brand"><div id="round-badge" class="round-badge" hidden><span>目前季數</span><strong id="round-number">01</strong><small id="round-limit"></small></div><div><strong>人生棋局</strong><small>LIFE BOARD GAME</small></div></div>
-      <div class="top-actions"><span id="save-status" class="save-status">本機自動儲存</span><button id="home-btn" class="quiet" type="button">首頁</button><button id="open-tab-btn" class="quiet" type="button">開啟同步頁籤</button><button id="export-btn" class="quiet" type="button">匯出存檔</button><label class="quiet file-btn">匯入存檔<input id="import-file" type="file" accept="application/json,.json" hidden></label><button id="new-game-btn" class="quiet" type="button">新遊戲</button></div>
+      <div class="top-actions"><span id="save-status" class="save-status">本機自動儲存</span><a class="quiet" href="../index.html">☰ 選單</a><button id="home-btn" class="quiet" type="button">本版首頁</button><span id="snd-ctrl"></span><button id="open-tab-btn" class="quiet" type="button">開啟同步頁籤</button><button id="export-btn" class="quiet" type="button">匯出存檔</button><label class="quiet file-btn">匯入存檔<input id="import-file" type="file" accept="application/json,.json" hidden></label><button id="new-game-btn" class="quiet" type="button">新遊戲</button></div>
     </header>
     <main>
       <section id="home" class="home-page" aria-labelledby="home-title">
@@ -20,7 +20,7 @@
           <h1 id="home-title">不同的起點，<br><em>各自的人生目標。</em></h1>
           <p>2–8 位玩家輪流玩，每人扮演一種收入狀態的人。走棋盤、碰運氣、做選擇，在景氣起伏中還清負債、存到第一桶金。</p>
           <button id="home-play-btn" class="primary" type="button">設定玩家，開始遊戲 →</button>
-          <p id="home-status" class="home-status">一台電腦就能開始，大家輪流操作。</p><div class="mode-switch" role="group" aria-label="遊戲模式"><span>遊戲模式</span><a class="on" aria-current="page">👤 個人版<small>人生棋局</small></a><a href="../enterprise/index.html#setup">🏭 企業版<small>經濟棋局</small></a></div>
+          <p id="home-status" class="home-status">一台電腦就能開始，大家輪流操作。</p><div class="mode-switch" role="group" aria-label="遊戲模式"><span>遊戲模式</span><a class="on" aria-current="page">👤 個人版<small>人生棋局</small></a><a href="../enterprise/index.html#setup">🏭 企業版<small>經濟棋局</small></a><a href="../online/host.html">📱 連線版<small>大螢幕＋手機</small></a></div>
         </div>
         <div class="home-guide" aria-label="玩法步驟">
           <div class="home-step"><span>01</span><div><h2>選角色，可以重複</h2><p>底層、上班族、公司高管、自由業，每種角色有不同的收入、生活費、負債和勝利目標。</p></div></div>
@@ -36,7 +36,7 @@
       </section>
       <div id="setup" class="setup-wrap" hidden>
         <section class="setup-hero"><p class="eyebrow">一台電腦・輪流遊玩・一回合代表一季</p><h1>選好角色，<br><em>開始你的人生。</em></h1><p>角色可以重複。每種角色的勝利目標不同：還清負債存到 50 萬、買車、買房，或是連續五季月入六萬。</p><div class="setup-notes"><span>24 格棋盤</span><span>4 種角色</span><span>4 類事件卡</span><span>AI 央行</span></div></section>
-        <section class="setup-card"><div class="section-heading"><div><p class="eyebrow">建立對局</p><h2>設定玩家</h2></div><span class="step-pill">2–8 人</span></div><div class="mode-switch" role="group" aria-label="遊戲模式"><span>遊戲模式</span><a class="on" aria-current="page">👤 個人版<small>人生棋局</small></a><a href="../enterprise/index.html#setup">🏭 企業版<small>經濟棋局</small></a></div><div id="setup-players"></div><button id="add-player" type="button" class="add-player">＋ 新增玩家</button><div class="setup-options"><label>最多季數<input id="rounds-input" type="number" min="8" max="60" value="24"></label></div><p class="helper">先達成自己目標的玩家獲勝；季數用完時比較目標進度。</p><p id="setup-error" class="form-error" role="alert"></p><button id="start-btn" class="primary big" type="button">開始遊戲 <span>→</span></button></section>
+        <section class="setup-card"><div class="section-heading"><div><p class="eyebrow">建立對局</p><h2>設定玩家</h2></div><span class="step-pill">2–8 人</span></div><div class="mode-switch" role="group" aria-label="遊戲模式"><span>遊戲模式</span><a class="on" aria-current="page">👤 個人版<small>人生棋局</small></a><a href="../enterprise/index.html#setup">🏭 企業版<small>經濟棋局</small></a><a href="../online/host.html">📱 連線版<small>大螢幕＋手機</small></a></div><div id="setup-players"></div><button id="add-player" type="button" class="add-player">＋ 新增玩家</button><div class="setup-options"><label>最多季數<input id="rounds-input" type="number" min="8" max="60" value="24"></label></div><p class="helper">先達成自己目標的玩家獲勝；季數用完時比較目標進度。</p><p id="setup-error" class="form-error" role="alert"></p><button id="start-btn" class="primary big" type="button">開始遊戲 <span>→</span></button></section>
       </div>
       <div id="game" hidden>
         <nav class="tabs" aria-label="遊戲頁面"><button data-tab="business" class="active">棋盤</button><button data-tab="events">卡牌圖鑑</button><button data-tab="economy">景氣與央行</button><button data-tab="history">紀錄</button></nav>
@@ -49,6 +49,7 @@
     <footer><span>人生棋局 · 所有數字皆為遊戲假設，單位為萬元</span><span>同一瀏覽器開啟相同網址可同步對局</span></footer>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script defer src="../online/sound.js"></script>
   <script defer src="./game.js"></script>
 </body>
 </html>

@@ -172,10 +172,11 @@ export function createGame({players,seed=Date.now(),targetWealth=5500,maxRounds=
   if(new Set(players.map(p=>p.roleId)).size!==players.length||players.some(p=>!roleById(p.roleId)))throw Error('每位玩家需要不同的企業角色。');
   const names=players.map(p=>String(p.name||'').trim());
   if(names.some(n=>!n)||new Set(names).size!==names.length)throw Error('玩家名稱不得空白或重複。');
+  if(players.some(p=>p.bot&&!['low','mid','high'].includes(p.bot.level)))throw Error('Bot 難度無效。');
   const n=Number(seed),goal=Number(targetWealth),limit=Number(maxRounds);
   if(!Number.isInteger(n)||!Number.isFinite(goal)||goal<2000||!Number.isInteger(limit)||limit<2||limit>50)throw Error('種子、目標或回合上限無效。');
   const state={version:1,round:1,turnIndex:0,phase:'roll',rng:n|0||1,seed:n,
-    players:players.map((p,i)=>({id:`player-${i+1}`,name:names[i],roleId:p.roleId,position:0,color:i,strikeShield:false,moveAdjust:0,stallNext:false})),
+    players:players.map((p,i)=>({id:`player-${i+1}`,name:names[i],roleId:p.roleId,bot:p.bot?{level:p.bot.level,...(p.bot.style?{style:p.bot.style}:{})}:null,position:0,color:i,strikeShield:false,moveAdjust:0,stallNext:false})),
     companies:Object.fromEntries(ROLES.map(r=>[r.id,{cash:1200,assetReferenceValue:800,headcount:r.baseHeadcount,debt:0,morale:100,startHeadcount:r.baseHeadcount,prevStartHeadcount:r.baseHeadcount,layoffsThis:0,layoffsPrev:0,hedgeUntil:null,leaseUntil:null,equityUntil:null}])),
     laborForce:STAFF.laborForce,activeEvents:[],eventSerial:0,
     bank:{liquidAssets:300,shortTermLiabilities:1000,totalLoans:1000,nonperformingLoans:40,rescues:[],riskRestrictionUntil:0},

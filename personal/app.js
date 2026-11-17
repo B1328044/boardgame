@@ -227,14 +227,35 @@ function render(){
   const onHome=page==='home';
   $('#round-badge').hidden=onHome||!state;$('#home').hidden=!onHome;$('#home-btn').classList.toggle('active',onHome);
   if(onHome){$('#setup').hidden=true;$('#game').hidden=true;$('#home-play-btn').textContent=state?'返回對局 →':'設定玩家，開始遊戲 →';$('#home-status').textContent=state?`已有對局 · 第 ${state.round} 季。`:'一台電腦就能開始，大家輪流操作。';return}
-  if(!state){$('#setup').hidden=false;$('#game').hidden=true;renderSetup();return}
+  if(!state){$('#setup').hidden=false;$('#game').hidden=true;renderSetup();soundWatch();return}
   $('#setup').hidden=true;$('#game').hidden=false;
   $('#round-number').textContent=String(state.round).padStart(2,'0');$('#round-limit').textContent=`／${state.maxRounds} 季`;
   document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-page').forEach(p=>p.classList.toggle('active',p.id===`tab-${tab}`));
   renderBoard();renderTurn();renderEconBanner();renderMini();renderPlayers();renderLibrary();renderEconomy();renderHistory();
-  scheduleBot();
+  scheduleBot();soundWatch();
 }
+/* ---------- 聲音（與連線版共用 online/sound.js） ---------- */
+// 比對上一次畫面：新抽的卡、新的遊戲紀錄、換人、對局結束，各自播對應的音效；背景音樂跟著景氣換曲風。
+// 右上角的「聲音」設定與第一次點擊解鎖。
+if(typeof Sound!=='undefined'){Sound.autoUnlock();Sound.mountControls($('#snd-ctrl'))}
+function sfx(name,arg){if(typeof Sound!=='undefined')Sound.play(name,arg)}
+let soundLast=null;
+function soundWatch(){
+  if(typeof Sound==='undefined')return;
+  if(!state){soundLast=null;Sound.setMood('lobby');return}
+  Sound.setMood(state.status==='playing'?economyRegime(state):'lobby');
+  const now={game:state.sync?.gameId,log:state.log.length,draw:state.lastDraw?`${state.round}-${state.turnIndex}-${state.lastDraw.cardId}`:null,turn:`${state.round}-${state.turnIndex}`,status:state.status};
+  if(soundLast&&soundLast.game===now.game){
+    let delay=0;
+    if(now.draw&&now.draw!==soundLast.draw){Sound.play('flip');Sound.play(state.lastDraw.type);delay=700}
+    if(now.log>soundLast.log)Sound.logEvent(state.log.slice(0,now.log-soundLast.log),delay);
+    if(now.status==='playing'&&now.turn!==soundLast.turn)setTimeout(()=>Sound.play('turn'),300);
+    if(now.status!=='playing'&&soundLast.status==='playing')setTimeout(()=>Sound.play('win'),1200);
+  }
+  soundLast=now;
+}
+
 
 /* ---------- Bot 自動操作 ---------- */
 // 只在看得見的頁籤驅動 Bot；每一步都透過 run() 取得最新狀態並上鎖，多個頁籤也不會重複操作。
@@ -274,7 +295,7 @@ document.addEventListener('visibilitychange',()=>scheduleBot());
 /* ---------- 動畫（總移動時間固定） ---------- */
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 function moveTokenStep(position,ms){
-  animation?.visited.add(position);
+  animation?.visited.add(position);sfx('step',animation?.visited.size||1);
   const token=$('#board .token.moving'),dest=$(`#board [data-tile-index="${position}"] .tile-tokens`);
   if(!token||!dest||tab!=='business'||page!=='game')return;
   const from=token.getBoundingClientRect();$('#board .tile-active')?.classList.remove('tile-active');
@@ -286,13 +307,13 @@ function beginRollAnimation({playerId,from,dice,reels}){
   if(!state||currentPlayer()?.id!==playerId||state.dice!==dice||document.hidden||tab!=='business'||page!=='game')return;
   cancelAnimation();const serial=animationSerial,route=movementPath(from,dice),stepMs=stepMsFor(route.length);
   animation={playerId,position:from,dice,reels,path:route,displayReels:[0,0],reelPositions:[0,0],spinning:[true,true],visited:new Set(),stage:'rolling'};
-  renderBoard();renderTurn();
+  renderBoard();renderTurn();sfx('spin');
   void (async()=>{
     const stop=[8,14];
     for(let t=0;t<16;t++){
       await pause(110);if(serial!==animationSerial)return;
       const reelsEl=document.querySelectorAll('#board .slot-reel');
-      for(let i=0;i<2;i++){if(!animation.spinning[i])continue;if(t<stop[i])animation.reelPositions[i]++;else{const d=(reels[i]-animation.reelPositions[i]%7+7)%7;animation.reelPositions[i]+=d||7;animation.spinning[i]=false}animation.displayReels[i]=animation.reelPositions[i]%7;const el=reelsEl[i];if(el){el.querySelector('.slot-strip').style.transform=`translateY(-${animation.reelPositions[i]*100}%)`;el.classList.toggle('spinning',animation.spinning[i])}}
+      for(let i=0;i<2;i++){if(!animation.spinning[i])continue;if(t<stop[i])animation.reelPositions[i]++;else{const d=(reels[i]-animation.reelPositions[i]%7+7)%7;animation.reelPositions[i]+=d||7;animation.spinning[i]=false;sfx('reelStop',i)}animation.displayReels[i]=animation.reelPositions[i]%7;const el=reelsEl[i];if(el){el.querySelector('.slot-strip').style.transform=`translateY(-${animation.reelPositions[i]*100}%)`;el.classList.toggle('spinning',animation.spinning[i])}}
     }
     if(serial!==animationSerial)return;animation.displayReels=[...reels];animation.stage='result';renderBoard();renderTurn();
     await pause(600);if(serial!==animationSerial)return;animation.stage='moving';renderBoard();renderTurn();

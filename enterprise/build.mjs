@@ -1,6 +1,6 @@
 import {readFileSync,writeFileSync} from 'node:fs';
 
-const files=['data.js','engine.js','sync.js','app.js'];
+const files=['data.js','engine.js','bot.js','sync.js','app.js'];
 const pieces=files.map(file=>readFileSync(new URL(file,import.meta.url),'utf8')
   .replace(/^import .*? from '\.\/[^']+';\r?\n/gm,'')
   .replace(/^export (const|function) /gm,'$1 '));

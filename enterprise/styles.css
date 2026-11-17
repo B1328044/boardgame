@@ -227,3 +227,18 @@ h1,h2,h3,p{margin-top:0}h1,h2,h3{letter-spacing:-.025em}h1{font-size:clamp(38px,
 .current-player-slot .wealth-line{padding:14px 0 11px}
 @media(max-width:760px){.player-chip{min-width:150px;padding:6px 10px 6px 6px}.chip-avatar{width:34px;height:34px}.chip-avatar span{width:27px;height:27px;font-size:14px}.player-detail{position:static;width:auto;max-height:none;margin-top:8px;box-shadow:var(--shadow)}}
 @media(prefers-reduced-motion:reduce){.player-detail{animation:none}.player-chip{transition:none}}
+
+/* ===== 電腦玩家（Bot） ===== */
+.setup-player{grid-template-columns:28px minmax(0,1fr) minmax(0,1fr) minmax(0,.95fr) 22px}
+.setup-player select{min-width:0}
+.badge.bot{background:#e8eefb;color:#3f5f96}
+.bot-status{display:flex;align-items:center;gap:8px;margin:2px 0 10px;padding:10px 12px;border-radius:8px;background:#1c3541;border:1px solid #35515b;color:#e3f6ef;font-size:13px;font-weight:700}
+.bot-dot{width:8px;height:8px;border-radius:50%;background:#78d2bd;box-shadow:0 0 8px #78d2bd;animation:fed-blink 1.2s ease-in-out infinite}
+.bot-last{border-left:2px solid #35515b;padding-left:9px}
+.bot-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px;padding-top:14px;border-top:1px solid #35515b}
+.bot-controls>button,.bot-speed button{background:#223d49;border:1px solid #41616a;color:#e3f6ef;border-radius:7px;padding:7px 11px;font-size:11px;font-weight:700}
+.bot-controls>button.on{background:#2f7d72;border-color:#78d2bd}
+.bot-speed{display:flex;gap:4px}.bot-speed button.on{background:#2f7d72;border-color:#78d2bd}
+.draw-deck:disabled,.card-continue:disabled{cursor:default;opacity:.6}
+@media(max-width:760px){.setup-player{grid-template-columns:22px minmax(0,1fr) minmax(0,1fr);row-gap:6px}.setup-player [data-setup-control]{grid-column:2/3}.setup-player .remove-player{grid-column:3/4;justify-self:end}}
+@media(prefers-reduced-motion:reduce){.bot-dot{animation:none}}

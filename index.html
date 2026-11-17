@@ -21,13 +21,16 @@
     .mode h2{margin:0;font-size:24px}
     .mode p{margin:0;color:var(--muted);line-height:1.7;font-size:14px}
     .mode span.go{margin-top:auto;color:var(--teal-dark);font-weight:800}
-    .mode.online{margin-top:18px}
+    .eyebrow.section{margin:34px 0 14px}
+    .menu-top{position:absolute;top:16px;right:max(16px,env(safe-area-inset-right,0px))}
+    body{position:relative}
     footer{margin-top:40px;color:#9a9f9d;font-size:12px}
     @media(max-width:680px){.modes{grid-template-columns:1fr}main{padding-top:44px}}
     @media(prefers-reduced-motion:reduce){.mode{transition:none}}
   </style>
 </head>
 <body>
+  <div class="menu-top"><span id="snd-ctrl"></span></div>
   <main>
     <p class="eyebrow">選擇遊戲模式</p>
     <h1>同一張棋盤，<br><em>兩種財經人生。</em></h1>
@@ -36,8 +39,14 @@
       <a class="mode" href="personal/index.html#setup"><span class="icon" aria-hidden="true">👤</span><h2>個人版 · 人生棋局</h2><p>底層、上班族、公司高管、自由業，各有收入、負債與勝利目標。玩家之間可以合作或搶案子，棋盤會隨景氣變化。</p><span class="go">開始設定 →</span></a>
       <a class="mode" href="enterprise/index.html#setup"><span class="icon" aria-hidden="true">🏭</span><h2>企業版 · 經濟棋局</h2><p>十種企業，聘僱裁員、借款還款，面對全球、產業與個人事件，看 AI 聯準會如何調整政策。</p><span class="go">開始設定 →</span></a>
     </div>
-    <a class="mode online" href="online/host.html"><span class="icon" aria-hidden="true">📱</span><h2>連線版 · 大螢幕＋手機</h2><p>這台電腦當大螢幕建立房間，大家用手機掃 QR 加入，每個人只看得到自己的財務。目前開放個人版。</p><span class="go">建立房間 →</span></a>
-    <footer>所有數字皆為遊戲假設。兩種模式的對局分開儲存，切換不會清除另一邊的進度。</footer>
+    <p class="eyebrow section">連線版 · 這台電腦當大螢幕，大家用手機掃 QR 加入</p>
+    <div class="modes">
+      <a class="mode" href="online/host.html"><span class="icon" aria-hidden="true">📱</span><h2>個人版連線</h2><p>每個人只在自己的手機上看到現金、負債與疲勞；被邀請合作或被搶案子時，在手機上回覆。</p><span class="go">建立房間 →</span></a>
+      <a class="mode" href="online/ent-host.html"><span class="icon" aria-hidden="true">📲</span><h2>企業版連線</h2><p>每人選一家企業，在手機上聘僱、裁員、借貸；公司財務只有自己看得到，大螢幕顯示事件與聯準會。</p><span class="go">建立房間 →</span></a>
+    </div>
+    <footer>所有數字皆為遊戲假設。兩種模式的對局分開儲存，切換不會清除另一邊的進度。每一頁右上角都有「☰ 選單」可以回到這裡，「聲音」可以分別調整音效與背景音樂。</footer>
   </main>
+  <script src="online/sound.js"></script>
+  <script>Sound.autoUnlock();Sound.mountControls(document.getElementById('snd-ctrl'));Sound.setMood('lobby');</script>
 </body>
 </html>

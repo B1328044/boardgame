@@ -1,7 +1,7 @@
 // 大螢幕＝房主：在這個瀏覽器裡執行遊戲規則與 Bot，手機透過瀏覽器直連加入。
 // 每位玩家只會收到公開資料＋自己的私人資料；大螢幕本身只顯示公開資料。
 'use strict';
-const SAVE_KEY='life-board-online-host';
+const SAVE_KEY=CFG.saveKey;
 const BOT_DELAY=Number(new URLSearchParams(location.search).get('botDelay'))||900;
 let room=null,host=null,pub=null,peer=null,botTimer=null,rollFx=null,lastRollKey=null,shownCardKey=null;
 // 棋子走路動畫：shownPos 是畫面上棋子所在的格子，walk 是正在走的那一步一步路線。
@@ -21,14 +21,14 @@ const send=(conn,msg)=>{try{if(conn?.open)conn.send(msg)}catch{}};
 
 /* ---------- 房間與連線 ---------- */
 function createRoom(){
-  room=new Room(newCode(),{mode:'personal'});setHostInfo();
+  room=new Room(newCode());setHostInfo();
   openRoom({fresh:true});publish();
 }
 function openRoom({fresh}){
   try{peer?.destroy()}catch{}
   if(typeof Peer!=='function'){setConn('off','連線套件沒有載入，請重新整理');return}
   setConn('','正在開放房間…');
-  const me=new Peer(NET.roomIdPrefix+room.code,signalOptions());peer=me;
+  const me=new Peer(CFG.prefix+room.code,signalOptions());peer=me;
   me.on('open',()=>{if(peer===me)setConn('on','房間已開放')});
   me.on('connection',conn=>attach(conn));
   me.on('disconnected',()=>{if(peer!==me||me.destroyed)return;setConn('off','與配對伺服器斷線，重新連線中…');setTimeout(()=>{if(peer===me&&!me.destroyed)me.reconnect()},NET.retryMs)});
@@ -111,7 +111,7 @@ function render(){
   if($('#log-dialog')?.open)fillLogDialog();
 }
 function startScreen(){
-  return `<section class="host-start"><p class="eyebrow">連線版 · 大螢幕</p><h1>建立房間，<br><em>大家用手機加入。</em></h1><p class="lead">這台電腦當作大螢幕（建議接投影），顯示棋盤與公開資訊；每位玩家用自己的手機掃 QR 加入，只會看到自己的現金與負債。</p><div class="mode-pick"><button class="primary big" type="button" data-act="create">建立個人版房間 →</button><button class="secondary" type="button" disabled>企業版（之後開放）</button></div><p class="muted">這台電腦的瀏覽器就是房主：遊戲規則在這裡執行，請在對局結束前保持這個分頁開著。重新整理不會遺失對局。</p></section>`;
+  return `<section class="host-start"><p class="eyebrow">連線版 · 大螢幕</p><h1>建立房間，<br><em>大家用手機加入。</em></h1><p class="lead">這台電腦當作大螢幕（建議接投影），顯示棋盤與公開資訊；每位玩家用自己的手機掃 QR 加入，只會看到自己的現金與負債。</p><div class="mode-pick"><button class="primary big" type="button" data-act="create">建立個人版房間 →</button><a class="secondary" href="./ent-host.html">改開企業版房間</a></div><p class="muted">這台電腦的瀏覽器就是房主：遊戲規則在這裡執行，請在對局結束前保持這個分頁開著。重新整理不會遺失對局。</p></section>`;
 }
 function lobbyScreen(){
   const seats=pub.seats.map(s=>{const r=pub.roles.find(x=>x.id===s.roleId);return `<li class="seat-row"><span class="seat-icon">${r.icon}</span><span class="seat-name"><b>${h(s.name)}</b><small>${h(r.name)} · ${h(r.goal)}</small></span><span class="seat-tag ${s.isBot?'bot':s.connected?'on':'off'}">${s.isBot?h(s.botLabel):s.connected?'已連線':'離線'}</span><button class="remove-player" type="button" data-act="remove" data-seat="${s.seatId}" aria-label="移除 ${h(s.name)}">×</button></li>`}).join('');
@@ -182,11 +182,11 @@ function hostSounds(prev,next,logBefore){
   // 新的卡片：翻牌＋依卡片類型的提示音
   const ck=g.card?`${g.round}-${g.turnIndex}-${g.card.id}`:null;
   const newCard=ck&&ck!==soundCardKey;
-  if(newCard){Sound.play('flip');Sound.play(g.card.type)}
+  if(newCard){Sound.play('flip');Sound.play(g.card.sound||g.card.type)}
   soundCardKey=ck;
   // 新動態裡的重大事件
   if(logBefore!==null&&g.logCount>logBefore){const ev=eventSound(g.log.slice(0,g.logCount-logBefore));if(ev)setTimeout(()=>Sound.play(ev.name),newCard?700:0)}
-  if(next.status!=='playing'&&prev.status==='playing'&&!eventSound(g.log.slice(0,3)))Sound.play('win');
+  if(next.status!=='playing'&&prev.status==='playing'&&eventSound(g.log.slice(0,3))?.name!=='win')setTimeout(()=>Sound.play('win'),1200);
   // 換下一位玩家
   if(next.status==='playing'&&g.currentId!==pg.currentId)setTimeout(()=>Sound.play('turn'),350);
 }
@@ -265,6 +265,8 @@ function winnerCard(g){
   return `<div class="center-icon">🏆</div><h3>${h(winners.map(w=>w.name).join('、')||'無人')} 獲勝</h3><p>${h(WIN_TEXT[g.winReason]||'')}</p><button class="primary" type="button" data-act="lobby">回到大廳，再玩一局</button>`;
 }
 
+// 開局設定（企業版另外加上淨資產目標）。
+function startOptions(){return {maxRounds:Number($('#max-rounds').value)}}
 function hostDo(fn){try{fn();publish()}catch(e){toast(e.message)}}
 document.addEventListener('click',e=>{
   const b=e.target.closest('[data-act]');if(!b)return;
@@ -279,7 +281,7 @@ document.addEventListener('click',e=>{
     for(const [id,l] of links)if(seat&&l.token===seat.token){send(l.conn,{kind:'removed',reason:'主持人把你移出房間了。'});links.delete(id)}
     room.removeSeat(b.dataset.seat);
   });
-  if(act==='start')return hostDo(()=>room.start({maxRounds:Number($('#max-rounds').value)}));
+  if(act==='start')return hostDo(()=>room.start(startOptions()));
   if(act==='lobby')return hostDo(()=>{clearTimeout(botTimer);botTimer=null;room.backToLobby()});
 });
 $('#log-dialog').addEventListener('click',e=>{if(e.target.id==='log-dialog')e.target.close()});   // 點背景關閉
@@ -287,24 +289,16 @@ $('#lobby-btn').addEventListener('click',()=>{if(pub?.status==='playing'&&!confi
 $('#close-btn').addEventListener('click',()=>{if(!confirmTwice('再按一次確認關閉房間；所有玩家會離開。'))return;closeRoom()});
 let armed=0;function confirmTwice(msg){if(Date.now()<armed){armed=0;return true}armed=Date.now()+4000;toast(msg);return false}
 
-// 聲音控制：第一次點畫面就開啟聲音；右上角可以分別關音效、音樂、調音量。
-document.addEventListener('pointerdown',()=>{Sound.unlock();Sound.startMusic()},{capture:true});
-function soundUi(){
-  const p=Sound.pref;
-  $('#sfx-btn').textContent=p.sfx?'🔊 音效':'🔇 音效';$('#sfx-btn').setAttribute('aria-pressed',p.sfx);
-  $('#music-btn').textContent=p.music?'🎵 音樂':'🎵 關';$('#music-btn').setAttribute('aria-pressed',p.music);
-  $('#vol').value=p.volume;
-  $('#sound-unlock').hidden=Sound.running()||!(p.sfx||p.music);
-}
-$('#sfx-btn').addEventListener('click',()=>Sound.setPref('sfx',!Sound.pref.sfx));
-$('#music-btn').addEventListener('click',()=>Sound.setPref('music',!Sound.pref.music));
-$('#vol').addEventListener('input',e=>Sound.setPref('volume',Number(e.target.value)));
+// 聲音：第一次點畫面就開啟；右上角「聲音」可以分別開關音效、背景音樂並各自調音量。
+Sound.autoUnlock();Sound.mountControls($('#snd-ctrl'));
+const unlockUi=()=>{$('#sound-unlock').hidden=Sound.running()||!(Sound.pref.sfx||Sound.pref.music)};
 $('#sound-unlock').addEventListener('click',()=>{Sound.unlock();Sound.startMusic()});
-Sound.onChange(soundUi);soundUi();
+Sound.onChange(unlockUi);unlockUi();
 
 // 啟動：有存檔就還原房間（大螢幕重新整理不會遺失對局），否則顯示建立房間畫面。
-(function boot(){
+// 等所有 script 載入後才啟動，讓企業版的畫面檔可以覆蓋 gameScreen 等函式。
+document.addEventListener('DOMContentLoaded',function boot(){
   const saved=storeGet(SAVE_KEY);
   if(saved){try{room=Room.fromJSON(saved);setHostInfo();openRoom({fresh:false});publish();return}catch(e){storeSet(SAVE_KEY,null)}}
   setConn('','尚未建立房間');render();
-})();
+});

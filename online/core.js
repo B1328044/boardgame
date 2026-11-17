@@ -1,4 +1,4 @@
-// 由 personal/data.js、engine.js、bot.js 與 online/room.mjs 產生，請勿直接修改；改完原始檔後執行 node online/build.mjs。
+// 由 ../personal/data.js、../personal/engine.js、../personal/bot.js、./room.mjs 產生，請勿直接修改；改完原始檔後執行 node online/build.mjs。
 'use strict';
 // 人生棋局：所有金額單位為「萬元」，一回合代表一季（3 個月）。
 // 目標數字照原始企劃；各角色的生活費、起始存款與平均收入經 simulate.mjs 模擬對戰校準，

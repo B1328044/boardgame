@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111b28">
+  <title>經濟棋局 · 大螢幕</title>
+  <link rel="stylesheet" href="../enterprise/styles.css">
+  <link rel="stylesheet" href="./online.css">
+</head>
+<body class="host-page ent">
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand"><div id="round-badge" class="round-badge" hidden><span>目前季數</span><strong id="round-number">01</strong><small id="round-limit"></small></div><div><strong>經濟棋局 · 連線版</strong><small>HOST SCREEN</small></div></div>
+      <div class="top-actions"><span id="conn" class="conn">連線中…</span><span id="room-chip" class="room-chip" hidden></span><span id="snd-ctrl"></span><a class="quiet" href="../index.html">☰ 選單</a><button id="lobby-btn" class="quiet" type="button" hidden>回到大廳</button><button id="close-btn" class="quiet" type="button" hidden>關閉房間</button></div>
+    </header>
+    <main id="view"></main>
+  </div>
+  <button id="sound-unlock" class="sound-unlock" type="button" hidden>🔇 點一下開啟聲音</button>
+  <dialog id="log-dialog" class="log-dialog" aria-labelledby="log-title"><div class="log-dialog-head"><h3 id="log-title">全部遊戲動態</h3><button class="quiet" type="button" data-act="log-close">關閉</button></div><div id="log-all" class="log-all"></div></dialog>
+  <script>var ONLINE_CFG={mode:'enterprise',prefix:'economy-board-online-v1-',saveKey:'economy-board-online-host',tokenPrefix:'economy-board-player-',joinPage:'ent-join.html'};</script>
+  <script src="./vendor/peerjs-1.5.2.min.js"></script>
+  <script src="./vendor/qrcode-generator-1.4.4.js"></script>
+  <script src="./ent-core.js"></script>
+  <script src="./common.js"></script>
+  <script src="./sound.js"></script>
+  <script src="./host.js"></script>
+  <script src="./ent-host-view.js"></script>
+</body>
+</html>

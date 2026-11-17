@@ -3,7 +3,7 @@
 'use strict';
 const params=new URLSearchParams(location.search);
 let code=(params.get('room')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4);
-const tokenKey=()=>`life-board-player-${code}`;
+const tokenKey=()=>`${CFG.tokenPrefix}${code}`;
 let pub=null,priv=null,joined=false,busy=false,kicked='',pendingHello=null;
 let peer=null,conn=null,refSerial=0,beatTimer=null,retryTimer=null;
 const waiting=new Map();
@@ -52,8 +52,10 @@ async function keepAwake(){
   wake='pending';
   try{const l=await navigator.wakeLock.request('screen');wake=l;l.addEventListener('release',()=>{if(wake===l)wake=null})}catch{wake=null}
 }
-function soundBtn(){const b=$('#snd');if(b){b.textContent=Sound.pref.sfx?'🔊':'🔇';b.setAttribute('aria-label',Sound.pref.sfx?'關閉音效與震動':'開啟音效與震動')}}
 document.addEventListener('pointerdown',()=>{Sound.unlock();keepAwake()},{capture:true});
+
+// 企業版手機頁面覆蓋這個函式，處理自己的按鈕（回傳 true 代表已處理）。
+function modeAction(a,b){return false}
 
 /* ---------- 連線 ---------- */
 function later(){clearTimeout(retryTimer);retryTimer=setTimeout(connect,NET.retryMs)}
@@ -76,7 +78,7 @@ function connect(){
 }
 function dial(){
   try{conn?.close()}catch{}
-  const c=peer.connect(NET.roomIdPrefix+code,{reliable:true});conn=c;
+  const c=peer.connect(CFG.prefix+code,{reliable:true});conn=c;
   c.on('open',async()=>{
     if(conn!==c)return;
     setConn('on','已連線');clearInterval(beatTimer);beatTimer=setInterval(()=>{if(conn?.open)conn.send({kind:'beat'})},NET.beatMs);
@@ -131,7 +133,7 @@ function joinForm(){
     <label class="field">房號<input id="code" maxlength="4" autocomplete="off" value="${h(code)}" placeholder="例如 AB12"></label>
     <label class="field">你的名字<input id="name" maxlength="16" placeholder="例如 小明"></label>
     <fieldset class="role-pick"><legend>選擇角色（角色可重複，不同玩家可以選同一個）</legend>${roles.map((r,i)=>`<label class="role-opt"><input type="radio" name="role" value="${r.id}" ${i===0?'checked':''}><span><b>${r.icon} ${h(r.name)}</b><small>${h(r.goal)}</small></span></label>`).join('')}</fieldset>
-    <button class="primary big" data-a="join">加入 <span>→</span></button></section>`;
+    <button class="primary big" data-a="join">加入 <span>→</span></button><p class="muted small"><a href="../index.html">☰ 回到選單</a></p></section>`;
 }
 function lobbyWait(){
   const roleOpts=pub.roles.map(r=>`<option value="${r.id}" ${r.id===priv.roleId?'selected':''}>${r.icon} ${h(r.name)}</option>`).join('');
@@ -198,6 +200,7 @@ function meCard(){
 document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-a]');if(!b||b.disabled)return;
   const a=b.dataset.a;Sound.play('click');
+  if(modeAction(a,b))return;
   if(a==='join'){
     const next=($('#code').value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4);
     if(next.length!==4)return toast('請輸入 4 碼房號。');
@@ -222,5 +225,7 @@ document.addEventListener('click',async e=>{
 document.addEventListener('change',async e=>{if(e.target.id==='my-role'){const res=await request('setRole',{roleId:e.target.value});if(!res.ok&&res.error)toast(res.error)}});
 // 手機從背景回來時，若連線已斷就重新連。
 document.addEventListener('visibilitychange',()=>{if(document.hidden)return;keepAwake();if(code&&!kicked&&!conn?.open)connect()});
-$('#snd').addEventListener('click',()=>{Sound.unlock();Sound.setPref('sfx',!Sound.pref.sfx);soundBtn();Sound.play('click')});soundBtn();
-render();connect();
+// 手機只有音效（背景音樂由大螢幕播放，避免多支手機一起響）。
+Sound.mountControls($('#snd-ctrl'),{music:false});
+// 等所有 script 載入後才啟動，讓企業版的畫面檔可以覆蓋 turnCard 等函式。
+document.addEventListener('DOMContentLoaded',()=>{render();connect()});

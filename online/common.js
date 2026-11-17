@@ -18,8 +18,9 @@ function splitLog(x){const r=/^第 (\d+) 季｜(.*)$/.exec(x);return r?{round:Nu
 function classify(t){
   if(/破產/.test(t))return ['bad','💥'];
   if(/達成目標|獲勝|買下/.test(t))return ['good','🏆'];
-  if(/合作|案子/.test(t))return ['social','🤝'];
-  if(/季結算|市場事件/.test(t))return ['econ','📈'];
+  if(/罷工|停擺|勒索/.test(t))return ['bad','👻'];
+  if(/合作|案子|聯盟|大客戶/.test(t))return ['social','🤝'];
+  if(/季結算|市場事件|聯準會/.test(t))return ['econ','📈'];
   if(/遭遇|倒會|自動動用|無法行動/.test(t))return ['bad','⚠️'];
   if(/抽到|選擇/.test(t))return ['card','🃏'];
   if(/拉出/.test(t))return ['roll','🎰'];
@@ -27,7 +28,7 @@ function classify(t){
   return ['','•'];
 }
 // 重大事件對應的音效（優先順序高的先播；同一次更新只播一個，避免太吵）。
-const EVENT_SOUNDS=[[/獲勝/,'win',6],[/破產/,'bankrupt',5],[/達成目標|買下/,'win',4],[/搶下/,'steal',3],[/合作，雙方/,'alliance',2],[/季結算/,'settle',1]];
+const EVENT_SOUNDS=[[/獲勝/,'win',6],[/破產/,'bankrupt',5],[/達成目標|買下/,'win',4],[/搶下/,'steal',3],[/合作，雙方|結成策略聯盟/,'alliance',2],[/撞上罷工幽靈|系統仍被勒索/,'loss',2],[/季結算/,'settle',1]];
 function eventSound(lines){
   let best=null;
   for(const x of lines){const t=splitLog(x).text;for(const [re,name,p] of EVENT_SOUNDS)if(re.test(t)){if(!best||p>best.p)best={name,p,text:t};break}}
@@ -49,6 +50,8 @@ const NET={
   offlineMs:15000,                        // 房主 15 秒沒收到就標成離線
   retryMs:3000
 };
+// 個人版／企業版共用同一套大螢幕與手機程式；企業版頁面在載入 common.js 前先定義 ONLINE_CFG 覆蓋這些設定。
+const CFG=Object.assign({mode:'personal',prefix:NET.roomIdPrefix,saveKey:'life-board-online-host',tokenPrefix:'life-board-player-',joinPage:'join.html'},globalThis.ONLINE_CFG||{});
 function signalOptions(){
   const raw=new URLSearchParams(location.search).get('signal');
   if(!raw)return {};
@@ -57,7 +60,7 @@ function signalOptions(){
 }
 // 給手機的加入網址：同一個資料夾的 join.html，帶上房號（與測試用的配對伺服器設定）。
 function joinLink(code){
-  const url=new URL('join.html',location.href);url.search='';url.hash='';
+  const url=new URL(CFG.joinPage,location.href);url.search='';url.hash='';
   url.searchParams.set('room',code);
   const signal=new URLSearchParams(location.search).get('signal');if(signal)url.searchParams.set('signal',signal);
   return url.href;
