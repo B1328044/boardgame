@@ -45,7 +45,7 @@ export function tileAt(track,i,state){
 export const tileType=(state,i,track='main')=>tileAt(track,i,state).type;
 export const tileFlipped=(state,i,track='main')=>!!tileAt(track,i,state).flipped;
 export const nodeKey=n=>`${n.t}-${n.i}`;
-const TILE_NAMES={home:'家鄉',fortune:'好運',market:'市場',chance:'機會',loss:'災難',airport:'機場',ramp:'交流道',toll:'收費站',arrival:'入境',abroad:'國外',return:'回國'};
+const TILE_NAMES={home:'家鄉',fortune:'好運',market:'市場',chance:'機會',loss:'災難',airport:'機場',ramp:'交流道',toll:'收費站',arrival:'入境',abroad:'國外',return:'回國',exit:'出口'};
 export function tileLabel(track,i,state){if(typeof track==='number'){state=i;i=track;track='main'}const t=tileAt(track,i,state).type;return `${track==='highway'?'高速公路·':track==='abroad'?'國外·':''}${TILE_NAMES[t]}`}
 export function nextNode(n,p){
   if(n.t==='main'){if(n.i===HIGHWAY.from&&p.owns.car&&p.useHighway)return {t:'highway',i:0};return {t:'main',i:(n.i+1)%BOARD.length}}

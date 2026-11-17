@@ -172,7 +172,16 @@ function stepWalk(){
 }
 const walkEnd=()=>walk?walk.start+walk.path.length*STEP_MS:0;
 const pawn=(p,current,moving)=>`<span class="pawn ${current?'current':''} ${moving?'moving':''}" style="--c:${COLORS[p.color]}" title="${h(p.name)}"><span>${p.icon}</span></span>`;
+// 個人版用等角棋盤（personal/iso.js）：只建立一次，每次重畫畫面後把它放回 #board，鏡頭位置與棋子動畫都不會重來。
+let hostIso=null;
+function placeIsoPawns(wrap,g,movingId){
+  if(!hostIso)hostIso=createIsoBoard();
+  if(hostIso.el.parentNode!==wrap)wrap.prepend(hostIso.el);
+  const pawns=g.players.filter(p=>!p.bankrupt).map(p=>({id:p.id,key:shownPos.get(p.id)??posKey(p),color:COLORS[p.color],icon:p.icon,name:p.name,current:p.id===g.currentId,moving:p.id===movingId}));
+  hostIso.render({tiles:{main:g.tiles,highway:g.highway.tiles,abroad:g.abroad.tiles},pawns,activeKey:movingId?pawns.find(p=>p.id===movingId)?.key:null});
+}
 function placePawns(movingId=walk?.playerId){
+  const isoWrap=$('#board.iso-wrap');if(isoWrap&&pub?.game)return placeIsoPawns(isoWrap,pub.game,movingId);
   const g=pub?.game,board=$('.host-board')||$('#board');if(!g||!board)return;
   board.querySelectorAll('.tile-tokens').forEach(el=>{el.innerHTML='';el.classList.remove('crowded')});
   board.querySelectorAll('.tile-active').forEach(el=>el.classList.remove('tile-active'));
@@ -243,15 +252,6 @@ function fillLogDialog(){
   $('#log-all').innerHTML=g.log.map(x=>{const {round,text}=splitLog(x),[cat,icon]=classify(text);return `<div class="log-item ${cat}"><span>${icon}</span><span>${round?`<small>第 ${round} 季</small> `:''}${h(text)}</span></div>`}).join('');
 }
 
-// 一格的畫面：data-node 給棋子定位用（主地圖另外保留 data-tile-index）。
-function tileHtml(track,i,t,style=''){
-  const num=track==='main'?String(i).padStart(2,'0'):track==='highway'?`H${i+1}`:`A${i+1}`,type=t.type||t;
-  const tag=t.flipped?'<span class="tile-tag bad">衰退</span>':t.boosted?'<span class="tile-tag good">×1.5</span>':'';
-  return `<div class="tile ${type} ${t.flipped?'flipped':''} ${t.boosted?'boosted':''}" data-node="${track}-${i}" ${track==='main'?`data-tile-index="${i}"`:''} ${style}><span class="tile-number">${num}</span><span class="tile-type">${TYPE_LABEL[type]}</span>${tag}<span class="tile-icon">${TYPE_ICON[type]}</span><div class="tile-tokens"></div></div>`;
-}
-function sideTracks(g){
-  return `<div class="side-tracks"><div class="side-track highway"><div class="side-track-label"><b>🛣️ 高速公路</b><small>有車才能走：第 ${g.highway.from} 格交流道 → 第 ${g.highway.to} 格，收費 ${m(g.highway.toll)}</small></div><div class="side-track-tiles">${g.highway.tiles.map((t,i)=>tileHtml('highway',i,{type:t})).join('')}</div></div><div class="side-track abroad"><div class="side-track-label"><b>✈️ 國外</b><small>剛好停在第 ${g.abroad.airport} 格機場可出國，只用一個轉輪</small></div><div class="side-track-tiles">${g.abroad.tiles.map((t,i)=>tileHtml('abroad',i,{type:t})).join('')}</div></div></div>`;
-}
 // 棋盤中央：依階段顯示天命卡揭曉、應考、暫停、機場、抽到的卡，或拉霸機。
 function centerHtml(g,cur,rolling){
   if(pub.status!=='playing')return winnerCard(g);
@@ -274,7 +274,6 @@ const DESTINY_MS=2600,destinyShownAt=new Map();
 function gameScreen(){
   const g=pub.game,cur=g.players.find(p=>p.id===g.currentId),finished=pub.status!=='playing',roles=pub.variant==='roles';
   $('#round-number').textContent=String(g.round).padStart(2,'0');$('#round-limit').textContent=`／${g.maxRounds} 季`;
-  const tiles=g.tiles.map((t,i)=>{const [row,col]=boardCoords(i);return tileHtml('main',i,t,`style="grid-row:${row};grid-column:${col}"`)}).join('');
   const rolling=rollFx&&Date.now()-rollFx<REEL_MS;if(rolling)setTimeout(render,REEL_MS+50);
   const center=centerHtml(g,cur,rolling);
   // 新動態提到的玩家，在右側進度列短暫亮起。
@@ -289,9 +288,9 @@ function gameScreen(){
       <aside class="host-left">
         <div class="turn-panel panel"><p class="eyebrow">${pub.variantShort} ${h(pub.variantLabel)} · 第 ${g.round}／${g.maxRounds} 季</p>${finished?`<h2 class="turn-name">對局結束</h2>`:`<h2 class="turn-name" style="color:${COLORS[cur.color]}">${cur.icon} ${h(cur.name)}</h2><p class="turn-role">${h(cur.roleName)} · ${h(PHASE_TEXT[g.phase]||'')}</p><p class="turn-meta">${g.respond?`📱 ${h(respondWait(g.respond))}`:cur.isBot?'🤖 Bot 自動操作中':'請在自己的手機上操作'}</p><p id="wait-note" class="wait-note"></p>`}</div>
         <div class="panel mini-panel ${econPing?'ping':''}" style="${econPing?f.style:''}"><div class="panel-title"><h3>本季景氣</h3><span class="pill">AI 央行</span></div>${g.regime!=='normal'?`<div class="econ-banner ${g.regime}"><b>${g.regime==='recession'?'📉 景氣衰退':'📈 景氣過熱'}</b><span>${h(g.regimeText)}</span></div>`:''}<div class="mini-economy">${[['成長率',pct(e.growth)],['通膨',pct(e.inflation)],['失業率',pct(e.unemployment)],['政策利率',pct(e.rate,2)],['車價',m(e.carPrice)],['房價',m(e.housePrice)]].map(([a,b])=>`<div class="mini-stat"><span>${a}</span><strong>${b}</strong></div>`).join('')}</div>${g.decision?`<p class="muted small">上季央行：${h(g.decision.action)}</p>`:''}</div>
-        <div class="panel rules-mini"><h3>規則速記</h3><ul><li><b>目標</b>：${roles?'依角色各自的目標（見右側）':h(pub.goalText)}</li><li>⌂ <b>經過家鄉</b>抽一張機會卡；停在家鄉疲勞 ${FATIGUE.restStop}</li><li>🚗 <b>有車</b>：轉輪 1–3 視為 4–6，可走高速公路</li><li>✈ <b>剛好停在機場</b>可買機票出國</li>${roles?'':'<li>💼 機會牌堆裡有<b>工作卡</b>，可應徵換工作</li>'}<li><b>加班</b> 收入 +${OVERTIME[1].income}%、疲勞 +${FATIGUE.overtime1}；疲勞 ≥ ${FATIGUE.burnout} 收入 ${FATIGUE.burnoutIncome}%</li></ul></div>
+        <div class="panel rules-mini"><h3>規則速記</h3><ul><li><b>目標</b>：${roles?'依角色各自的目標（見右側）':h(pub.goalText)}</li><li>⌂ <b>經過家鄉</b>抽一張機會卡；停在家鄉疲勞 ${FATIGUE.restStop}</li><li>🚗 <b>有車</b>：轉輪 1–3 視為 4–6；經過第 ${g.highway.from} 格交流道可走中央高速公路</li><li>✈ <b>剛好停在機場</b>可買機票出國</li>${roles?'':'<li>💼 機會牌堆裡有<b>工作卡</b>，可應徵換工作</li>'}<li><b>加班</b> 收入 +${OVERTIME[1].income}%、疲勞 +${FATIGUE.overtime1}；疲勞 ≥ ${FATIGUE.burnout} 收入 ${FATIGUE.burnoutIncome}%</li></ul></div>
       </aside>
-      <section class="host-board panel"><div class="panel-title"><div><p class="eyebrow">BOARD / 棋盤</p><h2>人生版圖</h2></div><div class="legend"><span><i class="dot fortune"></i>好運</span><span><i class="dot market"></i>市場</span><span><i class="dot chance"></i>機會</span><span><i class="dot loss"></i>災難</span><span><i class="dot airport"></i>機場</span></div></div><div class="board" id="board">${tiles}<div class="board-center">${center}</div></div>${sideTracks(g)}</section>
+      <section class="host-board panel"><div class="panel-title"><div><p class="eyebrow">BOARD / 棋盤</p><h2>人生版圖</h2></div><div class="legend"><span><i class="dot fortune"></i>好運</span><span><i class="dot market"></i>市場</span><span><i class="dot chance"></i>機會</span><span><i class="dot loss"></i>災難</span><span><i class="dot airport"></i>機場</span></div></div><div class="iso-wrap" id="board"><div class="board-center">${center}</div></div></section>
       <aside class="host-right">
         <div class="panel"><div class="panel-title"><h3>玩家目標進度</h3><span class="pill">公開資訊</span></div><div class="pub-players">${players}</div><p class="muted small">天命卡、工作／角色、車子與學貸、車貸是明牌；現金與其他負債只顯示在各自的手機上。</p></div>
       </aside>

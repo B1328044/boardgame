@@ -2,6 +2,7 @@ import {TIERS,ROLES,START,GOAL,BASE_JOB,JOBS,DESTINIES,BOARD,HIGHWAY,ABROAD,CAR,
 import {VARIANTS,createGame,drawDestiny,rollDice,drawEvent,resolveChoice,takeExam,endTurn,setOvertime,setHighway,repayDebt,borrow,buyCar,carOffer,buyHouse,canBuyHouse,housePlan,computeQuarter,totalDebt,netWorth,debtRate,creditLimit,creditUsed,goalProgress,goalText,chanceOptions,cardById,isJobCard,jobOf,jobById,roleById,destinyById,tierById,tileAt,nodeKey,tileLabel,ticketPrice,jobConditionText,examTarget,val,exportGame,importGame,economyRegime,respond,responder,respondOptions,quarterlyPayments} from './engine.js';
 import {syncInfo,isNewerGame} from './sync.js';
 import {BOT_LEVELS,LOW_STYLES,makeBot,botLabel,botChoice,botRespond,botManageStep} from './bot.js';
+import {createIsoBoard} from './iso.js';
 
 // 同一份程式有兩種玩法：?v=jobs（A 工作卡版，預設）與 ?v=roles（B 角色版），兩種對局分開儲存。
 const VARIANT=new URLSearchParams(location.search).get('v')==='roles'?'roles':'jobs';
@@ -94,7 +95,6 @@ const currentPlayer=()=>state?.players[state.turnIndex];
 // 現在該誰動作：平常是輪到的玩家；被邀請合作或被搶案子時是要回覆的人。
 const actorPlayer=()=>state?.phase==='respond'?responder(state):currentPlayer();
 const playerKey=p=>nodeKey({t:p.track,i:p.position});
-function boardCoords(i){if(i<=6)return [1,i+1];if(i<=12)return [i-5,7];if(i<=18)return [7,19-i];return [25-i,1]}
 // 剛翻開、還沒按「繼續」的卡（抽卡階段也會先顯示上一張的結果）。
 function drawnCard(){
   if(!['manage','draw'].includes(state.phase)||!state.lastDraw||state.lastDraw.type==='chance'&&!state.lastResult)return null;
@@ -175,24 +175,28 @@ function centerContent(){
   return null;
 }
 function slotMarkup(values){return `<div class="slot-machine" role="group" aria-label="兩個 0 到 6 的拉霸轉輪">${values.map((v,i)=>{const pos=animation?.reelPositions?.[i]??v;const cells=Array.from({length:49},(_,c)=>`<strong class="slot-cell">${c%7}</strong>`).join('');return `<span class="slot-reel ${animation?.stage==='rolling'&&animation.spinning[i]?'spinning':''}" aria-label="第 ${i+1} 個轉輪：${v}"><span class="slot-strip" style="transform:translateY(-${pos*100}%)">${cells}</span></span>`}).join('')}</div>`}
-function tileMarkup(track,i,pos,style=''){
-  const tile=tileAt(track,i,state),type=tile.type,key=nodeKey({t:track,i}),occ=pos.filter(x=>x.key===key);
-  const boosted=type==='fortune'&&economyRegime(state)==='boom';
-  const tokens=occ.map(x=>`<span class="token ${animation?.playerId===x.p.id?'moving':''}" title="${h(x.p.name)}" style="background:${colors[x.p.color]}"></span>`).join('');
-  const tag=tile.flipped?`<span class="tile-tag bad" title="${h(ECON_TILES.recession.text)}">衰退</span>`:boosted?`<span class="tile-tag good" title="${h(ECON_TILES.boom.text)}">×${ECON_TILES.boom.fortuneMultiplier}</span>`:'';
-  const num=track==='main'?String(i).padStart(2,'0'):track==='highway'?`H${i+1}`:`A${i+1}`;
-  return `<div class="tile ${type} ${tile.flipped?'flipped':''} ${boosted?'boosted':''} ${occ.length>4?'crowded':''} ${animation?.position===key?'tile-active':''} ${animation?.visited.has(key)?'tile-visited':''}" data-node="${key}" ${style}><span class="tile-number">${num}</span><span class="tile-type">${typeLabel[type]}</span>${tag}<span class="tile-icon">${typeIcon[type]}</span><div class="tile-tokens">${tokens}</div></div>`;
+// 等角棋盤（iso.js）：只建立一次，之後每次 render 更新格子與棋子；中央的拉霸、卡片與理財畫面浮在棋盤左上角。
+let isoBoard=null;
+function isoModel(){
+  const regime=economyRegime(state);
+  const pawns=state.players.filter(p=>!p.bankrupt).map(p=>({id:p.id,key:animation?.playerId===p.id?animation.position:playerKey(p),color:colors[p.color],icon:jobOf(p).icon,name:p.name,current:p.id===currentPlayer()?.id,moving:animation?.playerId===p.id}));
+  return {tiles:{main:BOARD.map((_,i)=>{const t=tileAt('main',i,state);return {type:t.type,flipped:!!t.flipped,boosted:regime==='boom'&&t.type==='fortune'}}),highway:HIGHWAY.tiles.map(t=>t.type),abroad:ABROAD.tiles.map(t=>t.type)},
+    pawns,activeKey:animation?.stage==='moving'?animation.position:null};
 }
+function renderPawns(){if(isoBoard&&state)isoBoard.render(isoModel())}
 function renderBoard(){
-  const pos=state.players.filter(p=>!p.bankrupt).map(p=>({p,key:animation?.playerId===p.id?animation.position:playerKey(p)}));
-  const tiles=BOARD.map((_,i)=>{const [row,col]=boardCoords(i);return tileMarkup('main',i,pos,`style="grid-row:${row};grid-column:${col}"`)}).join('');
+  const wrap=$('#board');if(!wrap)return;
+  if(!isoBoard)isoBoard=createIsoBoard();
+  if(isoBoard.el.parentNode!==wrap)wrap.prepend(isoBoard.el);
   const values=animation?.displayReels||(state.reels||[0,0]);
   const p=currentPlayer(),eff=state.effReels;
   const boosted=eff&&state.reels&&eff.some((v,k)=>v!==state.reels[k]);
   const total=animation?.stage==='rolling'?'數字跳動中…':state.dice===null?(p.track==='abroad'?'國外只用第一個轉輪':p.owns.car?'有車：1–3 視為 4–6':'啟動拉霸前進'):state.dice===0?'原地停留':`前進 ${state.dice} 格${boosted?`（有車 ${eff.join('+')}）`:''}`;
   const center=centerContent();
-  $('#board').innerHTML=tiles+`<div class="board-center ${center?.includes('manage-scene')?'manage-mode':''} ${center?.includes('strike-scene')?'strike-mode':''}">${center||`<div class="center-icon">⌁</div><h3>人生正在運轉</h3><p>兩輪拉霸 · 逐格前進 · 每季結算</p>${slotMarkup(values)}<div class="slot-total">${total}</div><small>經過家鄉抽一張機會卡</small>`}</div>`;
-  $('#side-tracks').innerHTML=`<div class="side-track highway"><div class="side-track-label"><b>🛣️ 高速公路</b><small>有車才能走：第 ${HIGHWAY.from} 格交流道 → 第 ${HIGHWAY.to} 格，收費 ${m(HIGHWAY.toll)}</small></div><div class="side-track-tiles">${HIGHWAY.tiles.map((_,i)=>tileMarkup('highway',i,pos)).join('')}</div></div><div class="side-track abroad"><div class="side-track-label"><b>✈️ 國外</b><small>剛好停在第 ${ABROAD.airport} 格機場可出國，只用一個轉輪</small></div><div class="side-track-tiles">${ABROAD.tiles.map((_,i)=>tileMarkup('abroad',i,pos)).join('')}</div></div>`;
+  let box=wrap.querySelector('.board-center');if(!box){box=document.createElement('div');wrap.appendChild(box)}
+  box.className=`board-center ${center?.includes('manage-scene')?'manage-mode':''} ${center?.includes('strike-scene')?'strike-mode':''}`;
+  box.innerHTML=center||`<div class="center-icon">⌁</div><h3>人生正在運轉</h3><p>兩輪拉霸 · 逐格前進 · 每季結算</p>${slotMarkup(values)}<div class="slot-total">${total}</div><small>經過家鄉抽一張機會卡；有車經過第 ${HIGHWAY.from} 格可走中央高速公路</small>`;
+  renderPawns();
 }
 
 /* ---------- 回合面板 ---------- */
@@ -431,14 +435,12 @@ document.addEventListener('visibilitychange',()=>scheduleBot());
 
 /* ---------- 動畫（總移動時間固定） ---------- */
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
+// 棋子一格一格走：等角棋盤的棋子用 CSS transition 平滑移到下一格。
 function moveTokenStep(key,ms){
   animation?.visited.add(key);sfx('step',animation?.visited.size||1);
-  const token=$('#tab-business .token.moving'),dest=$(`#tab-business [data-node="${key}"] .tile-tokens`);
-  if(!token||!dest||tab!=='business'||page!=='game')return;
-  const from=token.getBoundingClientRect();$('#tab-business .tile-active')?.classList.remove('tile-active');
-  dest.closest('.tile').classList.add('tile-active','tile-visited');dest.appendChild(token);
-  const to=token.getBoundingClientRect();token.style.transition='none';token.style.transform=`translate(${from.left-to.left}px,${from.top-to.top}px)`;token.getBoundingClientRect();
-  requestAnimationFrame(()=>{if(!token.isConnected)return;token.style.transition=`transform ${Math.max(60,ms-60)}ms linear`;token.style.transform='translate(0,0)'});
+  if(tab!=='business'||page!=='game')return;
+  document.documentElement.style.setProperty('--iso-step',`${Math.max(60,ms-60)}ms`);
+  renderPawns();
 }
 function beginRollAnimation({playerId,from,path,dice,reels}){
   if(!state||currentPlayer()?.id!==playerId||state.dice!==dice||document.hidden||tab!=='business'||page!=='game')return;

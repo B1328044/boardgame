@@ -37,7 +37,7 @@ test('高難度工作判斷：醫生值得受訓；比現在差的工作改洗�
   assert.equal(botChoice(t,q,seq([.9])),2,'已是醫生，把文書工作洗回重抽');
 });
 test('高難度機場判斷：只有趟次價值高於機票才出國',()=>{
-  const s=game([{level:'high'},null]);const p=s.players[0];p.position=4;p.cash=40;rollDice(s,[1,1]);
+  const s=game([{level:'high'},null]);const p=s.players[0];p.position=7;p.cash=40;rollDice(s,[1,1]);
   const v=tripValue(s,p),choice=botChoice(s,p,seq([.9]));
   assert.equal(choice,v>8?0:1);
 });

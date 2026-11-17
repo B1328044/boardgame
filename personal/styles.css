@@ -398,3 +398,56 @@ a.secondary,a.primary{display:inline-flex;align-items:center;justify-content:cen
 .variant-switch{margin-top:12px}
 .setup-player.no-role{grid-template-columns:32px minmax(0,1fr) minmax(0,1fr) 25px}
 .tile.home .tile-icon,.tile.airport .tile-icon{opacity:.9}
+
+/* ---------- 等角棋盤（iso.js，單機版與連線大螢幕共用） ---------- */
+.iso-wrap{position:relative;height:clamp(440px,64vh,780px);border-radius:14px;overflow:hidden;background:radial-gradient(ellipse at 45% 42%,#fbfaf6,#ebe7dc 72%);border:1px solid #e3e1d8}
+.iso-board{position:absolute;inset:0;cursor:grab;touch-action:none;user-select:none;outline:none}
+.iso-board.dragging{cursor:grabbing}
+.iso-board:focus-visible{box-shadow:inset 0 0 0 3px #7bd5ca}
+.iso-svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.iso-top{stroke:rgba(24,36,49,.16);stroke-width:1}
+.iso-side.l{filter:brightness(.86)}.iso-side.r{filter:brightness(.74)}
+.t-home .iso-top,.t-home .iso-side{fill:#d8efe5}
+.t-fortune .iso-top,.t-fortune .iso-side{fill:#fbf0d2}
+.t-market .iso-top,.t-market .iso-side{fill:#e4ecf8}
+.t-chance .iso-top,.t-chance .iso-side{fill:#e0f2e9}
+.t-loss .iso-top,.t-loss .iso-side,.iso-tile.flipped .iso-top,.iso-tile.flipped .iso-side{fill:#f1e3f5}
+.t-airport .iso-top,.t-airport .iso-side,.t-arrival .iso-top,.t-arrival .iso-side,.t-return .iso-top,.t-return .iso-side{fill:#ddeef6}
+.t-ramp .iso-top,.t-ramp .iso-side,.t-exit .iso-top,.t-exit .iso-side{fill:#e3e7eb}
+.t-abroad .iso-top,.t-abroad .iso-side{fill:#d7efef}
+.t-road .iso-top,.t-road .iso-side{fill:#59646d}
+.iso-tile.active .iso-top{stroke:#0e9186;stroke-width:3}
+.iso-lbl{font-family:'Noto Sans TC','DM Sans',sans-serif;font-weight:900;font-size:13px;pointer-events:none;fill:#53646c}
+.t-home .iso-lbl{fill:#168578}.t-fortune .iso-lbl{fill:#94690f}.t-market .iso-lbl{fill:#3f62a0}.t-chance .iso-lbl{fill:#1f7d5c}.t-loss .iso-lbl,.iso-tile.flipped .iso-lbl{fill:#7a3f8e}
+.t-airport .iso-lbl,.t-arrival .iso-lbl,.t-return .iso-lbl{fill:#1f7896}.t-abroad .iso-lbl{fill:#16797b}.t-ramp .iso-lbl,.t-exit .iso-lbl{fill:#4e5b66}
+.iso-num{font-size:8.5px;font-weight:800;fill:#7d8a8e;pointer-events:none}
+.iso-roadline{stroke:#f2d27a;stroke-width:2;stroke-dasharray:6 6}
+.iso-ev{stroke:#fff;stroke-width:1.5}.iso-ev.ev-fortune{fill:#fbf0d2}.iso-ev.ev-chance{fill:#e0f2e9}.iso-ev.ev-toll{fill:#d9c58b}
+.iso-evicon{font-size:11px;font-weight:800;pointer-events:none}.iso-evicon.ev-fortune{fill:#94690f}.iso-evicon.ev-chance{fill:#1f7d5c}.iso-evicon.ev-toll{fill:#5c4a12}
+.iso-tag.bad{fill:#a2486f}.iso-tag.good{fill:#c0901f}.iso-tagtext{font-size:9px;font-weight:800;fill:#fff;pointer-events:none}
+.iso-shadow{fill:rgba(24,36,49,.08)}
+.iso-grass{fill:#b9dca4}.iso-grass.inner{opacity:.55}
+.iso-rock.l{fill:#8a7a68}.iso-rock.r{fill:#6d5f50}
+.iso-trunk{fill:#7b5a3c}.iso-tree{fill:#5fa36b}
+.iso-block.house{fill:#f4efe4}.iso-roof.house{fill:#c8664f}.iso-block.tower{fill:#e8eef2}.iso-roof.tower{fill:#1f7896}
+.iso-block.l{filter:brightness(.88)}.iso-block.r{filter:brightness(.75)}
+.iso-pole{stroke:#8b979f;stroke-width:2}.iso-sign{fill:#1d7a4f}.iso-signtext{font-size:10px;font-weight:800;fill:#fff}
+.iso-flight{fill:none;stroke:#1f7896;stroke-width:3;stroke-dasharray:2 10;stroke-linecap:round}.iso-flight.glow{stroke-width:14;opacity:.08;stroke-dasharray:none}
+.iso-plane{font-size:24px}
+.iso-cloud{fill:rgba(255,255,255,.85)}
+.iso-pawn{transition:transform var(--iso-step,.22s) linear}
+.iso-pawn-shadow{fill:rgba(24,36,49,.18)}
+.iso-pawn-stick{stroke-width:4;stroke-linecap:round}
+.iso-pawn-head{stroke:#fff;stroke-width:2.5}
+.iso-pawn-icon{font-size:13px;pointer-events:none}
+.iso-pawn.current .iso-pawn-head{stroke:#ffd76a;stroke-width:3.5}
+.iso-pawn.moving{filter:drop-shadow(0 4px 6px rgba(14,145,134,.45))}
+.iso-cam{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:5px;z-index:2}
+.iso-cam button{border:1px solid #dfe3dd;background:#fff;color:#182431;border-radius:9px;padding:6px 10px;font-size:11px;font-weight:800;box-shadow:0 5px 14px rgba(24,36,49,.1);text-align:left;cursor:pointer}
+.iso-cam button:hover{border-color:#0e9186}
+.iso-zoom{display:flex;gap:5px}.iso-zoom button{flex:1;text-align:center}
+/* 棋盤中央原本的拉霸、卡片、理財畫面，改成浮在左上角（全覽時那裡是空的） */
+.iso-wrap .board-center{position:absolute;top:10px;left:10px;width:min(330px,52%);zoom:.8;max-height:calc((100% - 20px)/.8);overflow:auto;z-index:1;grid-column:auto;grid-row:auto;background:rgba(255,255,255,.94);box-shadow:0 12px 30px rgba(24,36,49,.12);padding:16px;backdrop-filter:blur(4px)}
+.iso-wrap .board-center:empty{display:none}
+@media(prefers-reduced-motion:reduce){.iso-pawn{transition:none}}
+@media(max-width:760px){.iso-wrap{height:min(78vh,560px)}.iso-wrap .board-center{width:calc((100% - 20px)/.8);max-height:calc(45%/.8)}.iso-cam button{padding:5px 8px}}

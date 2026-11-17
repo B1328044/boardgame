@@ -17,10 +17,10 @@ test('角色可以重複、2–8 人，起始現金與負債依角色設定',()=
   assert.throws(()=>game(['low']),/2 至 8/);
   assert.throws(()=>createGame({players:[{name:'A',roleId:'low'},{name:'A',roleId:'low'}]}),/重複/);
 });
-test('棋盤有 24 格：家鄉、機場、交流道，機會 8、好運 6、市場 4、災難 3',()=>{
+test('棋盤有 32 格：家鄉、機場、交流道、出口，機會 11、好運 8、市場 5、災難 4',()=>{
   const count=t=>BOARD.filter(x=>x.type===t).length;
-  assert.equal(BOARD.length,24);assert.equal(BOARD[0].type,'home');
-  assert.deepEqual([count('chance'),count('fortune'),count('market'),count('loss')],[8,6,4,3]);
+  assert.equal(BOARD.length,32);assert.equal(BOARD[0].type,'home');
+  assert.deepEqual([count('chance'),count('fortune'),count('market'),count('loss')],[11,8,5,4]);
   const s=game();assert.equal(s.variant,'roles');assert.ok(!chanceDeck(s).some(c=>c.id.startsWith('J')),'角色版沒有工作卡');
 });
 test('Fortune 卡一定獲利',()=>{
@@ -250,12 +250,12 @@ test('房貸：利率上升到月付金付不起利息時，預估與結算都�
   assert.equal(m.balance,900,'只夠付利息，本金不變');
   assert.ok(Math.abs(p.cash-(cash+q.net))<.02,'實際扣款＝預估扣款');
 });
-test('景氣衰退時第 10、20 格市場格變成災難格；過熱時好運獎金 ×1.5',()=>{
+test('景氣衰退時第 3、21 格市場格變成災難格；過熱時好運獎金 ×1.5',()=>{
   const s=game(['low','office']);
-  assert.equal(economyRegime(s),'normal');assert.equal(tileType(s,10),'market');
+  assert.equal(economyRegime(s),'normal');assert.equal(tileType(s,3),'market');
   s.economy.growth=-3;assert.equal(economyRegime(s),'recession');
-  assert.equal(tileType(s,10),'loss');assert.equal(tileType(s,20),'loss');assert.equal(tileType(s,3),'market');
-  s.players[0].position=19;rollDice(s,[0,1]);assert.equal(s.phase,'draw');
+  assert.equal(tileType(s,3),'loss');assert.equal(tileType(s,21),'loss');assert.equal(tileType(s,15),'market');
+  s.players[0].position=20;rollDice(s,[0,1]);assert.equal(s.phase,'draw');
   const d=drawEvent(s,'L06');assert.equal(d.type,'loss');assert.match(d.note,/衰退/);
   const t=game(['low','office']);t.economy.growth=4;assert.equal(economyRegime(t),'boom');
   land(t,'fortune','F07');assert.equal(t.players[0].cash,5+15);

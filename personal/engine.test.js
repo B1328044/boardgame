@@ -23,37 +23,37 @@ test('天命卡「學霸」學貸減半',()=>{
   const s=game(2,{},['D09','D01']);
   assert.equal(totalDebt(s.players[0]),START.debts[0].balance/2);assert.equal(totalDebt(s.players[1]),START.debts[0].balance);
 });
-test('主地圖：0 為家鄉、6 為機場、9 為交流道；高速公路 3 格、國外 7 格',()=>{
-  assert.equal(BOARD.length,24);assert.equal(BOARD[0].type,'home');assert.equal(BOARD[6].type,'airport');assert.equal(BOARD[9].type,'ramp');
-  assert.equal(HIGHWAY.tiles.length,3);assert.equal(ABROAD.tiles.at(-1).type,'return');
+test('主地圖 32 格：0 為家鄉、9 為機場、12 為交流道、28 為出口；高速公路 7 格、國外 12 格',()=>{
+  assert.equal(BOARD.length,32);assert.equal(BOARD[0].type,'home');assert.equal(BOARD[9].type,'airport');assert.equal(BOARD[12].type,'ramp');assert.equal(BOARD[28].type,'exit');
+  assert.equal(HIGHWAY.tiles.length,7);assert.equal(ABROAD.tiles.length,12);assert.equal(ABROAD.tiles.at(-1).type,'return');
 });
 test('經過家鄉會多抽一張機會卡（停在家鄉也算）',()=>{
-  const s=game();at(s,22);rollDice(s,[2,1]);
+  const s=game();at(s,30);rollDice(s,[2,1]);
   assert.equal(s.players[0].position,1);
   assert.deepEqual(s.queue.map(q=>q.kind),['chance','chance']);assert.equal(s.queue[1].source,'home');
-  const t=game();at(t,22);rollDice(t,[1,1]);assert.equal(t.players[0].position,0);assert.deepEqual(t.queue.map(q=>q.source),['home']);
+  const t=game();at(t,30);rollDice(t,[1,1]);assert.equal(t.players[0].position,0);assert.deepEqual(t.queue.map(q=>q.source),['home']);
 });
 test('家人後援：經過家鄉再拿 2 萬',()=>{
-  const s=game(2,{},['D10','D01']);at(s,23);rollDice(s,[1,0]);assert.equal(s.players[0].cash,START.cash+2);
+  const s=game(2,{},['D10','D01']);at(s,31);rollDice(s,[1,0]);assert.equal(s.players[0].cash,START.cash+2);
 });
 test('有車時每個轉輪的 1/2/3 視為 4/5/6，0 和 4–6 不變',()=>{
   const s=game();const p=at(s,1);p.owns.car=true;
   const r=rollDice(s,[1,3]);assert.deepEqual(r.eff,[4,6]);assert.equal(r.dice,10);
   const t=game();at(t,1).owns.car=true;assert.deepEqual(rollDice(t,[0,5]).eff,[0,5]);
 });
-test('有車經過交流道會走高速公路，並在第 17 格回到主地圖；沒車照走主地圖',()=>{
-  const s=game();const p=at(s,8);p.owns.car=true;
-  const path=movementPath(p,5);
-  assert.deepEqual(path.map(n=>`${n.t}-${n.i}`),['main-9','highway-0','highway-1','highway-2','main-17']);
-  p.owns.car=false;assert.deepEqual(movementPath(p,5).map(n=>`${n.t}-${n.i}`),['main-9','main-10','main-11','main-12','main-13']);
+test('有車經過交流道會走高速公路，並在第 28 格出口回到主地圖；沒車照走主地圖',()=>{
+  const s=game();const p=at(s,11);p.owns.car=true;
+  const path=movementPath(p,9);
+  assert.deepEqual(path.map(n=>`${n.t}-${n.i}`),['main-12','highway-0','highway-1','highway-2','highway-3','highway-4','highway-5','highway-6','main-28']);
+  p.owns.car=false;assert.deepEqual(movementPath(p,5).map(n=>`${n.t}-${n.i}`),['main-12','main-13','main-14','main-15','main-16']);
   p.owns.car=true;p.useHighway=false;assert.equal(movementPath(p,2).at(-1).t,'main');
 });
-test('通過收費站付 1 萬',()=>{
-  const s=game();const p=at(s,9);p.owns.car=true;rollDice(s,[4,0]);
-  assert.equal(p.track,'main');assert.equal(p.position,HIGHWAY.to);assert.equal(p.cash,START.cash-HIGHWAY.toll);
+test('走完高速公路經過兩個收費站，各付 1 萬',()=>{
+  const s=game();const p=at(s,12);p.owns.car=true;rollDice(s,[4,4]);
+  assert.equal(p.track,'main');assert.equal(p.position,HIGHWAY.to);assert.equal(p.cash,START.cash-2*HIGHWAY.toll);
 });
 test('剛好停在機場可以買機票出國；職業與天命卡可減免',()=>{
-  const s=game();at(s,4);rollDice(s,[1,1]);
+  const s=game();at(s,7);rollDice(s,[1,1]);
   assert.equal(s.phase,'choice');assert.equal(s.pendingChoice.kind,'airport');
   const p=s.players[0];p.cash=20;
   resolveChoice(s,p.id,0);
@@ -63,11 +63,11 @@ test('剛好停在機場可以買機票出國；職業與天命卡可減免',()=
   u.players[0].jobId='J10';assert.equal(ticketPrice(u,u.players[0]),0);
 });
 test('經過機場不會觸發出國；在國外只用第一個轉輪，走到回國自動回機場',()=>{
-  const s=game();at(s,4);rollDice(s,[2,1]);assert.notEqual(s.pendingChoice?.kind,'airport');
+  const s=game();at(s,7);rollDice(s,[2,1]);assert.notEqual(s.pendingChoice?.kind,'airport');
   const t=game();const p=at(t,0,'abroad');p.owns.car=true;
   const r=rollDice(t,[2,6]);assert.equal(r.dice,2);assert.equal(p.track,'abroad');assert.equal(p.position,2);
   assert.deepEqual(t.queue.map(q=>q.kind),['abroad']);
-  const u=game();const q=at(u,3,'abroad');rollDice(u,[6,0]);
+  const u=game();const q=at(u,8,'abroad');rollDice(u,[6,0]);
   assert.equal(q.track,'main');assert.equal(q.position,ABROAD.airport);assert.equal(u.phase,'manage');
 });
 test('國外卡都能結算；詐騙園區會受困，學習天才少等一回合',()=>{

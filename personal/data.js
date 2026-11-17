@@ -94,15 +94,23 @@ export const TILE_TYPES={
   toll:{label:'收費站',short:'Toll'},
   arrival:{label:'入境',short:'Arrival'},
   abroad:{label:'國外',short:'Abroad'},
-  return:{label:'回國',short:'Return'}
+  return:{label:'回國',short:'Return'},
+  exit:{label:'出口',short:'Exit'}
 };
-// 主地圖 24 格：0 為家鄉（每次經過抽一張機會卡），6 為機場，9 為高速公路交流道。
-const LAYOUT=['chance','fortune','market','chance','loss','airport','chance','fortune','ramp','market','chance','loss','fortune','chance','market','loss','chance','fortune','chance','market','fortune','fortune','chance'];
+// 主地圖 32 格（9×9 外圈，等角棋盤）：0 為家鄉（每次經過抽一張機會卡），9 為機場，12 為高速公路交流道，28 為高速公路出口。
+// 走向：家鄉在畫面最下面的角，先沿右下邊往右角，再沿右上邊往頂角，繞過左角回家鄉。
+const LAYOUT=['chance','fortune','market','chance','loss','fortune','chance','market','airport','chance','fortune','ramp','chance','loss','market','fortune','chance','fortune','loss','chance','market','chance','fortune','chance','fortune','chance','loss','exit','market','chance','fortune'];
 export const BOARD=[{type:'home'},...LAYOUT.map(type=>({type}))];
-// 高速公路：有車的玩家經過交流道時改走這條，3 格後在第 17 格回到主地圖（略過 10–16 格與兩格災難）。
-export const HIGHWAY={from:9,to:17,tiles:['fortune','toll','chance'].map(type=>({type})),toll:1};
-// 國外：剛好停在機場時可買機票飛過去；在國外只用一個轉輪移動；走到「回國」自動回到機場。
-export const ABROAD={tiles:['arrival','abroad','abroad','abroad','abroad','abroad','return'].map(type=>({type})),ticket:8,airport:6};
+// 高速公路：有車的玩家經過第 12 格交流道時改走這條，從中央斜穿 7 格到第 28 格出口（略過 13–27 格）；每經過一個收費站付 toll。
+export const HIGHWAY={from:12,to:28,tiles:['fortune','chance','toll','chance','fortune','toll','chance'].map(type=>({type})),toll:1};
+// 國外（右上角的浮空島，4×4 小環 12 格）：剛好停在機場時可買機票飛過去；在國外只用一個轉輪移動；走到「回國」自動回到機場。
+export const ABROAD={tiles:['arrival',...Array(10).fill('abroad'),'return'].map(type=>({type})),ticket:8,airport:9};
+// 等角棋盤的格子座標（畫面用）：主地圖是 n×n 外圈、高速公路在 x=m 這一列、國外島是 k×k 小環。
+export const MAP=(()=>{
+  const ring=n=>{const r=[];for(let y=n-1;y>=1;y--)r.push([n-1,y]);for(let x=n-1;x>=1;x--)r.push([x,0]);for(let y=0;y<=n-2;y++)r.push([0,y]);for(let x=0;x<=n-2;x++)r.push([x,n-1]);return r};
+  const n=9,m=4,k=4;
+  return {n,m,k,main:ring(n),highway:Array.from({length:n-2},(_,i)=>[m,i+1]),abroad:ring(k)};
+})();
 // 車子：有車的玩家，每個轉輪的 1／2／3 視為 4／5／6；可全額付清或貸款（頭期 20%，固定年息 3.5%，20 季攤還，明牌）。
 export const CAR={price:60,rolesPrice:100,downPct:20,rate:3.5,quarters:20,resale:.8,boost:{1:4,2:5,3:6}};
 
@@ -265,6 +273,6 @@ export const ABROAD_CARDS=[
 /* ---------- 景氣改變棋盤 ---------- */
 // 依上一季結算的成長率決定景氣狀態：衰退時部分市場格變成災難格；過熱時好運格獎金加成。
 export const ECON_TILES={
-  recession:{label:'衰退',growth:-1.5,flip:[10,20],to:'loss',text:'景氣衰退：第 10、20 格的市場格變成災難格'},
+  recession:{label:'衰退',growth:-1.5,flip:[3,21],to:'loss',text:'景氣衰退：第 3、21 格的市場格變成災難格'},
   boom:{label:'過熱',growth:3.5,fortuneMultiplier:1.5,text:'景氣過熱：好運格獎金 ×1.5'}
 };

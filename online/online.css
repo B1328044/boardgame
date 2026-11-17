@@ -272,6 +272,6 @@ body.turn-flash::after{content:'';position:fixed;inset:0;pointer-events:none;z-i
 .held-cards.phone p{margin:6px 0 2px;font-size:13px;color:#52625e}
 .toggle-row{display:flex;gap:8px;align-items:center;font-size:13px;margin:8px 0;color:#3f5450}
 /* 側邊軌道放在棋盤下方：棋盤高度扣掉軌道，讓整個版面一個螢幕看得完。 */
-.host-board:has(.side-tracks) .board{width:min(100%,calc((100vh - 370px)*1.21))}
-.host-board .side-track-tiles .tile-icon{display:none}
-.host-board .side-track-tiles .tile-type{font-size:10px}
+
+/* 個人版大螢幕：等角棋盤盡量填滿高度 */
+.host-board .iso-wrap{height:max(420px,calc(100vh - 250px))}

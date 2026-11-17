@@ -127,7 +127,7 @@ test('工作卡版：抽到工作卡時只有本人看到選項；可以應徵�
 });
 test('工作卡版：剛好停在機場可以選擇出國；有車可以切換走不走高速公路',()=>{
   const r=J('WXYZ');const a=r.addHuman({name:'甲'}),b=r.addHuman({name:'乙'});r.start();drawDestinies(r);
-  const g=r.game;g.players[0].cash=100;forceRoll(g,[3,3]);
+  const g=r.game;g.players[0].cash=100;forceRoll(g,[4,5]);
   assert.equal(g.phase,'choice');const c=r.privateView(a.token).choice;
   assert.equal(c.kind,'airport');assert.equal(c.options[0].key,'fly');
   r.act(a.token,{type:'choose',index:0});
