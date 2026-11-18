@@ -2,7 +2,7 @@ import {TIERS,ROLES,START,GOAL,BASE_JOB,JOBS,DESTINIES,BOARD,HIGHWAY,ABROAD,CAR,
 import {VARIANTS,createGame,drawDestiny,rollDice,drawEvent,resolveChoice,takeExam,endTurn,setOvertime,setHighway,repayDebt,borrow,buyCar,carOffer,buyHouse,canBuyHouse,housePlan,computeQuarter,totalDebt,netWorth,debtRate,creditLimit,creditUsed,goalProgress,goalText,chanceOptions,cardById,isJobCard,jobOf,jobById,roleById,destinyById,tierById,tileAt,nodeKey,tileLabel,ticketPrice,jobConditionText,examTarget,val,exportGame,importGame,economyRegime,respond,responder,respondOptions,quarterlyPayments} from './engine.js';
 import {syncInfo,isNewerGame} from './sync.js';
 import {BOT_LEVELS,LOW_STYLES,makeBot,botLabel,botChoice,botRespond,botManageStep} from './bot.js';
-import {createIsoBoard} from './iso.js';
+import {createIsoBoard,TABLE_SLOTS} from './iso.js';
 
 // 同一份程式有兩種玩法：?v=jobs（A 工作卡版，預設）與 ?v=roles（B 角色版），兩種對局分開儲存。
 const VARIANT=new URLSearchParams(location.search).get('v')==='roles'?'roles':'jobs';
@@ -175,18 +175,48 @@ function centerContent(){
   return null;
 }
 function slotMarkup(values){return `<div class="slot-machine" role="group" aria-label="兩個 0 到 6 的拉霸轉輪">${values.map((v,i)=>{const pos=animation?.reelPositions?.[i]??v;const cells=Array.from({length:49},(_,c)=>`<strong class="slot-cell">${c%7}</strong>`).join('');return `<span class="slot-reel ${animation?.stage==='rolling'&&animation.spinning[i]?'spinning':''}" aria-label="第 ${i+1} 個轉輪：${v}"><span class="slot-strip" style="transform:translateY(-${pos*100}%)">${cells}</span></span>`}).join('')}</div>`}
-// 等角棋盤（iso.js）：只建立一次，之後每次 render 更新格子與棋子；中央的拉霸、卡片與理財畫面浮在棋盤左上角。
+// 等角棋盤（iso.js 的桌面模式）：只建立一次，之後每次 render 更新格子、棋子與桌上的卡。
+// 中央的拉霸、卡片、選擇畫面在需要時浮在畫面中央；理財在右側的回合面板。
 let isoBoard=null;
+// 座位：依人數決定每位玩家坐在畫面的哪個位置（順時針：左下、左中、左上、上中、右上、右中、右下、下中）。
+// 4 人以下坐四個角落（2 人坐對角）；5–8 人依序加上左中、右中、上中、下中。
+const SEAT_ORDER=['bl','l','tl','t','tr','r','br','b'];
+function seatPositions(n){
+  const chosen=n<=2?['bl','tr'].slice(0,n):n<=4?['bl','tl','tr','br'].slice(0,n):['bl','tl','tr','br',...['l','r','t','b'].slice(0,n-4)];
+  return chosen.sort((a,b)=>SEAT_ORDER.indexOf(a)-SEAT_ORDER.indexOf(b));
+}
+const debtIcon=d=>d.type==='auto'?'🚗':d.type==='student'?'🎓':d.type==='mortgage'?'🏠':'💳';
+// 玩家面前桌上的卡：天命卡、工作卡（角色版是角色）、負債卡。明牌朝上；非明牌只有輪到本人時朝上。
+function tableCards(p){
+  const d=destinyById(p.destinyId),job=jobOf(p),own=p.id===actorPlayer()?.id&&!p.bot;
+  const cards=[d?{face:'up',tone:'destiny',kind:'destiny',id:d.id,icon:d.icon,name:d.name}:{face:'empty'},
+    IS_ROLES?{face:'up',tone:'job',kind:'role',id:p.roleId,icon:job.icon,name:roleById(p.roleId).name}:{face:'up',tone:'job',kind:'job',id:job.id,icon:job.icon,name:job.name},
+    ...p.debts.filter(x=>x.balance>0).map(x=>({face:x.public||own?'up':'down',tone:'debt',kind:'debt',id:x.id,icon:debtIcon(x),name:x.name}))];
+  return cards.slice(0,TABLE_SLOTS);
+}
+let seatList=[];
 function isoModel(){
   const regime=economyRegime(state);
   const pawns=state.players.filter(p=>!p.bankrupt).map(p=>({id:p.id,key:animation?.playerId===p.id?animation.position:playerKey(p),color:colors[p.color],icon:jobOf(p).icon,name:p.name,current:p.id===currentPlayer()?.id,moving:animation?.playerId===p.id}));
+  const pos=seatPositions(state.players.length);
+  seatList=state.players.map((p,i)=>({pos:pos[i],player:p,cards:tableCards(p)}));
   return {tiles:{main:BOARD.map((_,i)=>{const t=tileAt('main',i,state);return {type:t.type,flipped:!!t.flipped,boosted:regime==='boom'&&t.type==='fortune'}}),highway:HIGHWAY.tiles.map(t=>t.type),abroad:ABROAD.tiles.map(t=>t.type)},
-    pawns,activeKey:animation?.stage==='moving'?animation.position:null};
+    pawns,activeKey:animation?.stage==='moving'?animation.position:null,
+    seats:seatList.map(s=>({pos:s.pos,color:colors[s.player.color],cards:s.cards.map(({face,tone,icon,name})=>({face,tone,icon,name}))}))};
+}
+function onTableCard(si,ci){
+  const s=seatList[si],c=s?.cards[ci];if(!c||c.face==='empty')return;
+  if(c.face==='down'){
+    const el=$('#card-viewer');
+    el.innerHTML=`<div class="viewer-card card-back-view" role="dialog" aria-modal="true" aria-label="蓋著的卡"><p class="card-hint">負債卡 · 非明牌</p><span class="revealed-symbol big">🂠</span><h3>${h(s.player.name)} 的蓋牌</h3><p class="revealed-desc">這張負債不是明牌，輪到 ${h(s.player.name)} 時才會翻開。</p><button type="button" class="card-continue" data-action="close-viewer">關閉</button></div>`;
+    el.hidden=false;el.querySelector('[data-action="close-viewer"]').focus();return;
+  }
+  openCardView(c.kind,c.id,s.player.id);
 }
 function renderPawns(){if(isoBoard&&state)isoBoard.render(isoModel())}
 function renderBoard(){
   const wrap=$('#board');if(!wrap)return;
-  if(!isoBoard)isoBoard=createIsoBoard();
+  if(!isoBoard)isoBoard=createIsoBoard({table:true,onCard:onTableCard});
   if(isoBoard.el.parentNode!==wrap)wrap.prepend(isoBoard.el);
   const values=animation?.displayReels||(state.reels||[0,0]);
   const p=currentPlayer(),eff=state.effReels;
@@ -194,8 +224,15 @@ function renderBoard(){
   const total=animation?.stage==='rolling'?'數字跳動中…':state.dice===null?(p.track==='abroad'?'國外只用第一個轉輪':p.owns.car?'有車：1–3 視為 4–6':'啟動拉霸前進'):state.dice===0?'原地停留':`前進 ${state.dice} 格${boosted?`（有車 ${eff.join('+')}）`:''}`;
   const center=centerContent();
   let box=wrap.querySelector('.board-center');if(!box){box=document.createElement('div');wrap.appendChild(box)}
-  box.className=`board-center ${center?.includes('manage-scene')?'manage-mode':''} ${center?.includes('strike-scene')?'strike-mode':''}`;
-  box.innerHTML=center||`<div class="center-icon">⌁</div><h3>人生正在運轉</h3><p>兩輪拉霸 · 逐格前進 · 每季結算</p>${slotMarkup(values)}<div class="slot-total">${total}</div><small>經過家鄉抽一張機會卡；有車經過第 ${HIGHWAY.from} 格可走中央高速公路</small>`;
+  // 中央浮出：有卡片／選擇／暫停畫面時顯示；拉霸只在擲之前與轉動時顯示，棋子走路時收起來讓出棋盤；
+  // 理財畫面改由右側的回合面板處理，所以中央不顯示。
+  const rolling=animation&&animation.stage!=='moving';
+  const show=center?!center.includes('manage-scene'):rolling||(!animation&&state.status==='playing'&&state.phase==='roll');
+  box.className=`board-center ${center?.includes('strike-scene')?'strike-mode':''}`;
+  box.hidden=!show;
+  if(!show){box.innerHTML='';renderPawns();return}
+  const rollBtn=!animation&&state.phase==='roll'&&!p.bot?`<button class="card-continue" type="button" data-action="roll">啟動拉霸　▦</button>`:'';
+  box.innerHTML=center||`<div class="center-icon">⌁</div><h3>${h(p.name)} 的回合</h3><p>兩輪拉霸 · 逐格前進 · 每季結算</p>${slotMarkup(values)}<div class="slot-total">${total}</div>${rollBtn}<small>經過家鄉抽一張機會卡；有車經過第 ${HIGHWAY.from} 格可走中央高速公路</small>`;
   renderPawns();
 }
 
@@ -277,16 +314,72 @@ function playerCard(p,extra=''){
   const goalLine=IS_ROLES?goalText(p):`淨資產 ${m(netWorth(p))}／${m(GOAL.netWorth)}`;
   return `<article class="player-card ${turn} ${p.bankrupt?'bankrupt':''} ${extra}" style="--player-color:${colors[p.color]}"><div class="player-card-head"><div class="player-identity"><span class="role-icon">${job.icon}</span><div><h3>${h(p.name)}</h3><small>${h(sub)}</small></div></div><span class="position-label">${h(tileLabel(p.track,p.position,state))}</span></div><div class="wealth-line"><span>現金</span><strong>${m(p.cash)}</strong></div><div class="goal-line"><div class="goal-line-head"><span>${h(goalLine)}</span><b>${Math.round(prog*100)}%</b></div><div class="goal-track"><i style="width:${Math.round(prog*100)}%"></i></div></div>${heldCards(p)}<div class="player-badges">${playerBadges(p)}</div><div class="finance-grid"><div class="finance-stat negative"><span>總負債</span><strong>${m(totalDebt(p))}</strong></div><div class="finance-stat ${p.lastIncome===null?'':'positive'}"><span>上季收入</span><strong>${p.lastIncome===null?'—':m(p.lastIncome)}</strong></div><div class="finance-stat ${p.lastNet<0?'negative':'positive'}"><span>上季淨額</span><strong>${p.lastNet===null?'—':signed(p.lastNet)}</strong></div></div>${inv?`<ul class="invest-list">${inv}</ul>`:''}<details class="finance-details"><summary>負債明細與上季收支</summary><table class="flow-table"><tbody>${debts}</tbody></table><table class="flow-table"><tbody>${last}</tbody></table></details></article>`;
 }
+// 座位頭像：四個角落（5–8 人再加四邊中間）。點頭像在旁邊彈出完整的玩家卡。
 function renderPlayers(){
   const cur=state.status==='playing'?currentPlayer():null;
-  if(openPlayerId&&(!state.players.some(p=>p.id===openPlayerId)||openPlayerId===cur?.id))openPlayerId=null;
-  $('#current-player').innerHTML=cur?playerCard(cur):'';
-  const chips=state.players.map(p=>{
-    const job=jobOf(p),prog=Math.round(goalProgress(state,p)*100),isCur=p.id===cur?.id,isOpen=p.id===openPlayerId,win=state.winnerIds.includes(p.id);
-    return `<button type="button" class="player-chip ${isCur?'current':''} ${isOpen?'open':''} ${p.bankrupt?'bankrupt':''}" data-player-chip="${p.id}" style="--player-color:${colors[p.color]};--prog:${prog}" aria-pressed="${isOpen}" ${isCur?'disabled':''} title="${isCur?'目前玩家，細節在右側':'點一下查看細節'}"><span class="chip-avatar"><span>${job.icon}</span></span><span class="chip-text"><b>${h(p.name)}${win?' 🏆':''}</b><small>${h(IS_ROLES?roleById(p.roleId).name:job.name)} · ${m(p.cash)}</small><i class="chip-track"><i style="width:${prog}%"></i></i></span>${isCur?'<span class="chip-now">輪到</span>':''}</button>`;
-  }).join('');
-  const open=state.players.find(p=>p.id===openPlayerId);
-  $('#player-cards').innerHTML=`<div class="player-strip" role="group" aria-label="其他玩家">${chips}</div>${open?`<div class="player-detail">${playerCard(open,'detail')}</div>`:''}`;
+  if(openPlayerId&&!state.players.some(p=>p.id===openPlayerId))openPlayerId=null;
+  const pos=seatPositions(state.players.length),slots={t:'',b:''};let corner='';
+  state.players.forEach((p,i)=>{
+    const job=jobOf(p),prog=Math.round(goalProgress(state,p)*100),isCur=p.id===cur?.id,win=state.winnerIds.includes(p.id);
+    const html=`<button type="button" class="tg-seat pos-${pos[i]} ${isCur?'current':''} ${p.bankrupt?'bankrupt':''} ${p.id===openPlayerId?'open':''}" data-seat-player="${p.id}" style="--player-color:${colors[p.color]};--prog:${prog}" aria-expanded="${p.id===openPlayerId}" title="點一下查看 ${h(p.name)} 的資料"><span class="tg-ring"><span class="tg-face">${job.icon}</span>${isCur?'<span class="tg-now">輪到</span>':''}</span><span class="tg-meta"><b>${h(p.name)}${win?' 🏆':''}</b><small>${h(IS_ROLES?roleById(p.roleId).name:job.name)}${p.bot?' · 🤖':''}</small><strong>${m(p.cash)}</strong><i class="tg-bar"><i style="width:${prog}%"></i></i></span></button>`;
+    if(pos[i]==='t'||pos[i]==='b')slots[pos[i]]=html;else corner+=html;
+  });
+  $('#seats').innerHTML=corner;$('#seat-slot-t').innerHTML=slots.t;$('#seat-slot-b').innerHTML=slots.b;
+  const open=state.players.find(p=>p.id===openPlayerId),panel=$('#panel-player');
+  if(open){panel.innerHTML=playerCard(open,'detail');if(openPanel!=='player')openPanel='player';placePanel(panel,document.querySelector(`[data-seat-player="${open.id}"]`))}
+  else if(openPanel==='player'){openPanel=null}
+  syncPanels();
+}
+/* ---------- 浮動面板（景氣、選單、玩家資料）：一次只開一個 ---------- */
+let openPanel=null;
+const PANEL_ANCHOR={econ:'#econ-pill',menu:'[data-panel="menu"]'};
+function placePanel(panel,anchor){
+  if(!anchor)return;
+  panel.hidden=false;
+  const r=anchor.getBoundingClientRect(),pw=panel.offsetWidth,ph=panel.offsetHeight,W=innerWidth,H=innerHeight;
+  let x=r.left+r.width/2-pw/2,y=r.bottom+10;
+  if(y+ph>H-12)y=r.top-ph-10;
+  if(y<12){y=Math.max(12,Math.min(H-ph-12,r.top+r.height/2-ph/2));x=r.left<W/2?r.right+10:r.left-pw-10}
+  panel.style.left=`${Math.max(12,Math.min(W-pw-12,x))}px`;panel.style.top=`${Math.max(12,Math.min(H-ph-12,y))}px`;
+}
+function syncPanels(){
+  for(const k of ['econ','menu','player']){const el=$(`#panel-${k}`);if(openPanel!==k)el.hidden=true}
+  document.querySelectorAll('[data-panel]').forEach(b=>b.setAttribute('aria-expanded',String(b.dataset.panel===openPanel)));
+  if(openPanel&&openPanel!=='player')placePanel($(`#panel-${openPanel}`),document.querySelector(PANEL_ANCHOR[openPanel]));
+}
+function togglePanel(name){openPlayerId=null;openPanel=openPanel===name?null:name;renderPlayers()}
+function toggleSeat(id){if(openPlayerId===id){openPlayerId=null;openPanel=null}else{openPlayerId=id;openPanel='player'}renderPlayers()}
+function closePanels(){if(!openPanel&&!openPlayerId)return;openPanel=null;openPlayerId=null;renderPlayers()}
+/* ---------- 上方膠囊：季數＋景氣 ---------- */
+function renderEconPill(){
+  const regime=economyRegime(state),label={normal:'景氣平穩',recession:'景氣衰退',boom:'景氣過熱'}[regime];
+  $('#econ-pill').innerHTML=`<b>第 ${state.round}／${state.maxRounds} 季</b><small>${VARIANTS[VARIANT].short} ${h(VARIANTS[VARIANT].label)}</small><span class="tg-econ ${regime}">${regime==='recession'?'📉':regime==='boom'?'📈':'📊'} ${label}</span>`;
+}
+/* ---------- 下方回合列＋右側回合面板 ---------- */
+// 回合面板（原本的 CURRENT TURN）放在右側抽屜：輪到真人理財或對局結束時自動打開，其他時候收起來。
+let drawerOpen=false,drawerKey=null;
+function drawerAuto(){
+  const p=currentPlayer(),key=state.status!=='playing'?`end:${state.sync?.gameId}`:`${state.sync?.gameId}:${state.round}:${state.turnIndex}:${state.phase==='manage'&&!p?.bot&&!animation&&!drawnCard()?'manage':'other'}`;
+  if(key===drawerKey)return;
+  drawerKey=key;drawerOpen=state.status!=='playing'||key.endsWith(':manage');
+}
+const PHASE_LABEL={destiny:'抽天命卡',roll:'啟動拉霸',draw:'抽卡',choice:'做出選擇',respond:'等待回覆',manage:'理財時間',skip:'暫停一回合',exam:'受訓應考'};
+function renderDock(){
+  drawerAuto();
+  const dock=$('#dock'),p=currentPlayer();
+  $('#turn-drawer').classList.toggle('open',drawerOpen);
+  const toggle=`<button type="button" class="tg-btn" data-action="toggle-drawer" aria-expanded="${drawerOpen}">${drawerOpen?'收起面板 ▸':'回合面板 ◂'}</button>`;
+  if(state.status!=='playing'){
+    const winners=state.players.filter(x=>state.winnerIds.includes(x.id)).map(x=>x.name).join('、')||'無';
+    dock.innerHTML=`<span class="tg-dock-who"><b>🏁 對局結束</b><small>勝出：${h(winners)}</small></span>${toggle}<button type="button" class="tg-btn primary" data-action="new-game">再玩一局</button>`;return;
+  }
+  const actor=actorPlayer(),last=state.log[0]||'';
+  const phase=animation?(animation.stage==='rolling'?'拉霸轉動中':'前進中'):state.phase==='respond'?`等 ${actor.name} 回覆`:PHASE_LABEL[state.phase]||'';
+  let main='';
+  if(actor?.bot)main=botControls();
+  else if(!animation&&state.phase==='roll')main=`<button type="button" class="tg-btn primary" data-action="roll">啟動拉霸 ▦</button>`;
+  else if(!animation&&!drawnCard()&&(state.phase==='manage'||state.phase==='skip'))main=`<button type="button" class="tg-btn primary" data-action="end-turn">${lastTurn()?'結算本季 →':'交給下一位 →'}</button>`;
+  dock.innerHTML=`<span class="tg-dot" style="background:${colors[p.color]}"></span><span class="tg-dock-who"><b>${h(p.name)} · ${h(phase)}${actor?.bot?' 🤖':''}</b><small title="${h(last)}">${h(last)}</small></span>${toggle}${main}`;
 }
 function renderEconBanner(){
   const regime=economyRegime(state),el=$('#econ-banner');
@@ -350,16 +443,24 @@ function renderHistory(){
   const rows=state.players.map(p=>`<tr><td>${h(p.name)}（${h(IS_ROLES?roleById(p.roleId).name:jobOf(p).name)}）</td>${p.history.slice(-8).map(x=>`<td>${m(x[key]??x.cash)}</td>`).join('')}</tr>`).join('');
   $('#history-body').innerHTML=`<div class="history-layout"><div class="history-chart"><h3>近 8 季${IS_ROLES?'現金':'淨資產'}</h3><div style="overflow:auto"><table class="history-table"><tbody>${rows}</tbody></table></div></div><div class="history-chart"><h3>遊戲動態</h3><div class="log-list">${state.log.slice(0,80).map(x=>`<div class="log-item">${h(x)}</div>`).join('')}</div></div></div>`;
 }
+// 遊戲中：全螢幕桌面。上方工具列收起來，整組按鈕（含聲音、存檔）搬進 ☰ 選單；離開遊戲畫面再搬回去。
+function setTableMode(on){
+  document.body.classList.toggle('table-mode',on);
+  const actions=document.querySelector('.top-actions'),home=on?$('#menu-actions'):document.querySelector('.topbar');
+  if(actions&&actions.parentNode!==home)home.appendChild(actions);
+  if(!on){openPanel=null;openPlayerId=null}
+}
 function render(){
   const onHome=page==='home';
+  if(onHome||!state)setTableMode(false);
   $('#round-badge').hidden=onHome||!state;$('#home').hidden=!onHome;$('#home-btn').classList.toggle('active',onHome);
   if(onHome){$('#setup').hidden=true;$('#game').hidden=true;$('#home-play-btn').textContent=state?'返回對局 →':'設定玩家，開始遊戲 →';$('#home-status').textContent=state?`已有對局 · 第 ${state.round} 季。`:'一台電腦就能開始，大家輪流操作。';soundWatch();return}
   if(!state){$('#setup').hidden=false;$('#game').hidden=true;renderSetup();soundWatch();return}
-  $('#setup').hidden=true;$('#game').hidden=false;
+  $('#setup').hidden=true;$('#game').hidden=false;setTableMode(true);
   $('#round-number').textContent=String(state.round).padStart(2,'0');$('#round-limit').textContent=`／${state.maxRounds} 季`;
-  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
-  document.querySelectorAll('.tab-page').forEach(p=>p.classList.toggle('active',p.id===`tab-${tab}`));
-  renderBoard();renderTurn();renderEconBanner();renderMini();renderPlayers();renderLibrary();renderEconomy();renderHistory();
+  // 卡牌圖鑑、景氣與央行、紀錄：從選單打開，蓋在棋盤上面。
+  document.querySelectorAll('#game .tab-page').forEach(p=>p.classList.toggle('active',p.id===`tab-${tab}`));
+  renderBoard();renderTurn();renderDock();renderEconBanner();renderMini();renderEconPill();renderPlayers();renderDock();renderLibrary();renderEconomy();renderHistory();
   scheduleDestiny();scheduleBot();soundWatch();
 }
 /* ---------- 聲音（與連線版共用 online/sound.js） ---------- */
@@ -446,7 +547,7 @@ function beginRollAnimation({playerId,from,path,dice,reels}){
   if(!state||currentPlayer()?.id!==playerId||state.dice!==dice||document.hidden||tab!=='business'||page!=='game')return;
   cancelAnimation();const serial=animationSerial,route=path.map(nodeKey),stepMs=stepMsFor(route.length);
   animation={playerId,position:nodeKey(from),dice,reels,path:route,displayReels:[0,0],reelPositions:[0,0],spinning:[true,true],visited:new Set(),stage:'rolling'};
-  renderBoard();renderTurn();sfx('spin');
+  renderBoard();renderTurn();renderDock();sfx('spin');
   void (async()=>{
     const stop=[8,14];
     for(let t=0;t<16;t++){
@@ -454,10 +555,10 @@ function beginRollAnimation({playerId,from,path,dice,reels}){
       const reelsEl=document.querySelectorAll('#board .slot-reel');
       for(let i=0;i<2;i++){if(!animation.spinning[i])continue;if(t<stop[i])animation.reelPositions[i]++;else{const d=(reels[i]-animation.reelPositions[i]%7+7)%7;animation.reelPositions[i]+=d||7;animation.spinning[i]=false;sfx('reelStop',i)}animation.displayReels[i]=animation.reelPositions[i]%7;const el=reelsEl[i];if(el){el.querySelector('.slot-strip').style.transform=`translateY(-${animation.reelPositions[i]*100}%)`;el.classList.toggle('spinning',animation.spinning[i])}}
     }
-    if(serial!==animationSerial)return;animation.displayReels=[...reels];animation.stage='result';renderBoard();renderTurn();
-    await pause(600);if(serial!==animationSerial)return;animation.stage='moving';renderBoard();renderTurn();
+    if(serial!==animationSerial)return;animation.displayReels=[...reels];animation.stage='result';renderBoard();renderTurn();renderDock();
+    await pause(600);if(serial!==animationSerial)return;animation.stage='moving';renderBoard();renderTurn();renderDock();
     for(const key of animation.path){if(serial!==animationSerial)return;animation.position=key;moveTokenStep(key,stepMs);await pause(stepMs)}
-    if(serial!==animationSerial)return;animation=null;renderBoard();renderTurn();scheduleBot();
+    if(serial!==animationSerial)return;animation=null;renderBoard();renderTurn();renderDock();scheduleBot();
   })();
 }
 async function rollWithAnimation(){
@@ -471,14 +572,21 @@ $('#setup-players').addEventListener('input',e=>{if(e.target.dataset.setupName!=
 $('#setup-players').addEventListener('change',e=>{if(e.target.dataset.setupRole!==undefined)setupPlayers[Number(e.target.dataset.setupRole)].roleId=e.target.value;if(e.target.dataset.setupControl!==undefined)setupPlayers[Number(e.target.dataset.setupControl)].control=e.target.value});
 $('#setup-players').addEventListener('click',e=>{const i=e.target.dataset.removePlayer;if(i!==undefined&&setupPlayers.length>2){setupPlayers.splice(Number(i),1);renderSetup()}});
 $('#start-btn').addEventListener('click',async()=>{try{await withLock(()=>{const saved=readStored();if(saved){adoptShared(saved);page='game';notify('已加入另一個頁籤的對局。');return}const next=createGame({variant:VARIANT,players:setupPlayers.map(p=>({name:p.name,roleId:p.roleId,bot:p.control==='human'?null:makeBot(p.control)})),maxRounds:Number($('#rounds-input').value)});prepareNewSession(next);state=next;page='game';tab='business';$('#setup-error').textContent='';rememberView();save();render()})}catch(e){$('#setup-error').textContent=e.message}});
-$('#player-cards').addEventListener('click',e=>{if(e.target.closest('[data-action="view-card"]'))return;const b=e.target.closest('[data-player-chip]');if(!b||b.disabled)return;openPlayerId=openPlayerId===b.dataset.playerChip?null:b.dataset.playerChip;renderPlayers()});
-$('.tabs').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(!b)return;tab=b.dataset.tab;rememberView();render()});
+// 全螢幕桌面：分頁、浮動面板、座位頭像；點面板以外的地方就把面板收起來。
+$('#game').addEventListener('click',e=>{
+  if(!state)return;
+  const tb=e.target.closest('[data-tab]');if(tb){tab=tb.dataset.tab;openPanel=null;openPlayerId=null;rememberView();render();return}
+  const pb=e.target.closest('[data-panel]');if(pb){togglePanel(pb.dataset.panel);return}
+  const seat=e.target.closest('[data-seat-player]');if(seat){toggleSeat(seat.dataset.seatPlayer);return}
+  if(openPanel&&!e.target.closest('.tg-panel'))closePanels();
+});
 $('#game').addEventListener('click',e=>{
   const a=e.target.closest('[data-action]');if(!a||!state)return;
   const action=a.dataset.action,p=currentPlayer();
   if(action==='new-game'){void resetGame();return}
   if(action==='view-card'){openCardView(a.dataset.kind,a.dataset.id,a.dataset.player);return}
   if(action==='dismiss-destiny'){dismissedDestinyKey=destinyReveal()?.key||null;render();return}
+  if(action==='toggle-drawer'){drawerOpen=!drawerOpen;renderDock();return}
   if(action==='bot-pause'){botPaused=!botPaused;render();return}
   if(action==='bot-speed'){botSpeed=a.dataset.value;try{localStorage.setItem('life-board-bot',JSON.stringify({speed:botSpeed}))}catch{}render();return}
   if(action==='respond'){const t=responder(state);if(t&&!t.bot)void run(()=>respond(state,t.id,a.dataset.value==='1'));return}
@@ -489,7 +597,7 @@ $('#game').addEventListener('click',e=>{
   if(action==='draw-card'){void run(()=>drawEvent(state));return}
   if(action==='choose'){void run(()=>resolveChoice(state,p.id,Number(a.dataset.value)));return}
   if(action==='exam'){void run(()=>{const r=takeExam(state);notify(r.ok?`擲出 ${r.roll}${r.bonus?`＋${r.bonus}`:''}，錄取！`:`擲出 ${r.roll}${r.bonus?`＋${r.bonus}`:''}，沒通過。`)});return}
-  if(action==='dismiss-card'){dismissedCardKey=drawnCard()?.key||null;renderBoard();renderTurn();return}
+  if(action==='dismiss-card'){dismissedCardKey=drawnCard()?.key||null;renderBoard();renderTurn();renderDock();return}
   if(action==='end-turn'){void run(()=>{const before=state.round;endTurn(state);if(state.status!=='playing')notify('對局結束！');else if(state.round!==before)notify(`第 ${before} 季已結算。`)});return}
   if(action==='overtime'){void run(()=>setOvertime(state,p.id,Number(a.dataset.value)));return}
   if(action==='repay'){const id=$('#repay-debt').value,n=Number($('#repay-amount').value);void run(()=>repayDebt(state,p.id,id,n));return}
@@ -504,7 +612,8 @@ async function resetGame(){
   await withLock(()=>{clearSave();cancelAnimation();state=null;page='game';tab='business';rememberView();render()});
 }
 $('#card-viewer').addEventListener('click',e=>{if(e.target.id==='card-viewer'||e.target.closest('[data-action="close-viewer"]'))closeCardView()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#card-viewer').hidden)closeCardView()});
+document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(!$('#card-viewer').hidden){closeCardView();return}if(!state||page!=='game')return;if(openPanel||openPlayerId){closePanels();return}if(tab!=='business'){tab='business';rememberView();render();return}if(drawerOpen){drawerOpen=false;renderDock()}});
+addEventListener('resize',()=>{if(openPanel&&state&&page==='game')renderPlayers()});
 $('#home-btn').addEventListener('click',()=>{page='home';render();window.scrollTo({top:0,behavior:'smooth'})});
 $('#home-play-btn').addEventListener('click',()=>{page='game';render();window.scrollTo({top:0,behavior:'smooth'})});
 $('#new-game-btn').addEventListener('click',()=>{void resetGame()});
